@@ -68,3 +68,69 @@ body {
   font-size: 11px;
   overflow-wrap: anywhere;
 }
+
+/* Polygon center markers: emerald diamonds, distinct from orange data points. */
+.poly-marker-wrap {
+  background: transparent;
+  border: none;
+}
+
+.poly-marker {
+  width: 16px;
+  height: 16px;
+  background: #059669;
+  border: 2.5px solid #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgb(15 23 42 / 0.45);
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+
+.poly-marker.selected {
+  width: 20px;
+  height: 20px;
+  background: #065f46;
+  border-color: #fef08a;
+}
+
+/* Zoom-adaptive permanent labels. */
+.leaflet-tooltip.poly-label,
+.leaflet-tooltip.poly-label-detailed {
+  background: rgb(255 255 255 / 0.95);
+  border: 1px solid #a7f3d0;
+  border-radius: 9999px;
+  box-shadow: 0 1px 6px rgb(15 23 42 / 0.2);
+  color: #065f46;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaflet-tooltip.poly-label::before,
+.leaflet-tooltip.poly-label-detailed::before {
+  display: none;
+}
+
+.leaflet-tooltip.poly-label-detailed {
+  border-radius: 0.625rem;
+  white-space: normal;
+  max-width: 240px;
+}
+
+.poly-label-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poly-label-detail {
+  color: #047857;
+  font-size: 11px;
+  font-weight: 600;
+}
