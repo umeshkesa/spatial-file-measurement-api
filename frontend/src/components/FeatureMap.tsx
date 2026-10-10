@@ -4,6 +4,7 @@ import type { Feature as GeoJsonFeature, FeatureCollection, Geometry } from "geo
 import type { LatLngExpression } from "leaflet";
 import L from "leaflet";
 import type { FeatureMeasurement } from "../lib/api";
+import { buildFeatureTooltipHtml } from "../lib/tooltip";
 
 interface Props {
   features: FeatureMeasurement[];
@@ -169,7 +170,14 @@ export function FeatureMap({ features, selectedId, onSelect, fitSignal = 0 }: Pr
         }}
         onEachFeature={(f, layer) => {
           const props = (f as unknown as RichFeature).properties;
-          layer.bindTooltip(props.__name);
+          // Hover tooltip: full measurement record matched by feature ID
+          // (GeometryCollection members share their parent's record).
+          // Hover never touches selection state — click below owns that.
+          const record = lookup.get(props.__fid);
+          layer.bindTooltip(
+            record ? buildFeatureTooltipHtml(record) : props.__name,
+            { sticky: true, direction: "top", className: "spatial-tooltip", opacity: 1 },
+          );
           layer.on("click", () => {
             const full = lookup.get(props.__fid);
             if (full) onSelect(full);

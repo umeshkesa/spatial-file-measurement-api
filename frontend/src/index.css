@@ -15,3 +15,56 @@ body {
 .leaflet-container {
   font: inherit;
 }
+
+/* SpatialLens hover tooltip: compact measurement card on the Leaflet layer. */
+.leaflet-tooltip.spatial-tooltip {
+  background: #ffffff;
+  border: 1px solid #a7f3d0;
+  border-left: 4px solid #059669;
+  border-radius: 0.625rem;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.15);
+  color: #1e293b;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  min-width: 180px;
+  max-width: 260px;
+  padding: 8px 10px;
+}
+
+.leaflet-tooltip.spatial-tooltip::before {
+  display: none;
+}
+
+.spatial-tip-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #064e3b;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+
+.spatial-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1px 0;
+}
+
+.spatial-tip-row > span {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.spatial-tip-row > strong {
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.spatial-tip-error {
+  margin-top: 4px;
+  color: #b45309;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

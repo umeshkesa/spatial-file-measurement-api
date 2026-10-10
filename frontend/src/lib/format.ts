@@ -13,14 +13,14 @@ export function formatMeasurement(f: FeatureMeasurement): string {
   return `${pretty} ${f.measurement.unit}`;
 }
 
-export function featureDisplayName(f: FeatureMeasurement): string {
+export function featureDisplayName(f: FeatureMeasurement, fallback?: string): string {
   const p = f.properties ?? {};
   for (const key of ["Name", "name", "NAME", "title", "label"]) {
     const v = p[key];
     if (typeof v === "string" && v.trim()) return v;
     if (typeof v === "number") return String(v);
   }
-  return `Feature ${f.feature_id}`;
+  return fallback ?? `Feature ${f.feature_id}`;
 }
 
 export function formatDateTime(iso: string): string {
