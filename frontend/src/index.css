@@ -1,0 +1,136 @@
+@import "leaflet/dist/leaflet.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-slate-100 text-slate-900 antialiased;
+}
+
+.leaflet-container {
+  font: inherit;
+}
+
+/* SpatialLens hover tooltip: compact measurement card on the Leaflet layer. */
+.leaflet-tooltip.spatial-tooltip {
+  background: #ffffff;
+  border: 1px solid #a7f3d0;
+  border-left: 4px solid #059669;
+  border-radius: 0.625rem;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.15);
+  color: #1e293b;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  min-width: 180px;
+  max-width: 260px;
+  padding: 8px 10px;
+}
+
+.leaflet-tooltip.spatial-tooltip::before {
+  display: none;
+}
+
+.spatial-tip-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #064e3b;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+
+.spatial-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1px 0;
+}
+
+.spatial-tip-row > span {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.spatial-tip-row > strong {
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.spatial-tip-error {
+  margin-top: 4px;
+  color: #b45309;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+/* Polygon center markers: emerald diamonds, distinct from orange data points. */
+.poly-marker-wrap {
+  background: transparent;
+  border: none;
+}
+
+.poly-marker {
+  width: 16px;
+  height: 16px;
+  background: #059669;
+  border: 2.5px solid #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 1px 5px rgb(15 23 42 / 0.45);
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+
+.poly-marker.selected {
+  width: 20px;
+  height: 20px;
+  background: #065f46;
+  border-color: #fef08a;
+}
+
+/* Zoom-adaptive permanent labels. */
+.leaflet-tooltip.poly-label,
+.leaflet-tooltip.poly-label-detailed {
+  background: rgb(255 255 255 / 0.95);
+  border: 1px solid #a7f3d0;
+  border-radius: 9999px;
+  box-shadow: 0 1px 6px rgb(15 23 42 / 0.2);
+  color: #065f46;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaflet-tooltip.poly-label::before,
+.leaflet-tooltip.poly-label-detailed::before {
+  display: none;
+}
+
+.leaflet-tooltip.poly-label-detailed {
+  border-radius: 0.625rem;
+  white-space: normal;
+  max-width: 240px;
+}
+
+.poly-label-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poly-label-detail {
+  color: #047857;
+  font-size: 11px;
+  font-weight: 600;
+}
