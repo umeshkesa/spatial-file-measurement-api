@@ -164,6 +164,14 @@ npm run dev   # http://localhost:5173  (backend must run on :8000)
 - Production bundle: `npm run build` (typecheck + `dist/`), `npm run preview` to serve
   it, `npm run lint` for oxlint. Verified: build clean, preview serves `index.html`
   with the SpatialLens title and bundle.
+- Tests: `npm test` runs vitest unit suites (export helpers: CSV escaping, formula-
+  injection guard, pagination walk, JSON serialization — 24 tests). Live end-to-end
+  export tests (`src/lib/live-export.integration.test.ts`, skipped by default) upload
+  the real `sample_data/` files and walk real pagination; run with the backend up:
+  `SPATIAL_LIVE_API=1 VITE_API_BASE_URL=http://127.0.0.1:8000 npm test -- live-export`.
+- Dashboard map preview, cross-page selection sync (map ↔ table), full-dataset CSV/JSON
+  export with formula-injection protection, and feature details with collapsible raw
+  geometry are all backed by live API data.
 - Note: the API exposes no file-list endpoint, so upload history in the UI is
   session-local; the dashboard always shows the selected file's real data.
 

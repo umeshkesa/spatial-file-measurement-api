@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Database,
@@ -12,10 +12,12 @@ import {
   X,
 } from "lucide-react";
 import { Dashboard } from "./components/Dashboard";
-import { FeatureMap } from "./components/FeatureMap";
+import { ExportPanel } from "./components/ExportPanel";
+import { FeatureDetailsPanel } from "./components/FeatureDetailsPanel";
+import { MapCard } from "./components/MapCard";
 import { MeasurementTable } from "./components/MeasurementTable";
 import { UploadPanel } from "./components/UploadPanel";
-import { Alert, Badge, Button, Card, CardBody, CardHeader, EmptyState, Spinner } from "./components/ui";
+import { Alert, Badge, Button, Card, CardBody, CardHeader, EmptyState } from "./components/ui";
 import { cn } from "./lib/cn";
 import {
   API_BASE_URL,
@@ -28,7 +30,7 @@ import {
   type FileUploadResult,
   type MeasurementsPage,
 } from "./lib/api";
-import { featureDisplayName, formatMeasurement } from "./lib/format";
+import { fetchAllMeasurements } from "./lib/export";
 
 type View = "dashboard" | "upload" | "map" | "table";
 
@@ -40,6 +42,7 @@ const NAV: Array<{ id: View; label: string; icon: React.ReactNode }> = [
 ];
 
 const PAGE_SIZE = 25;
+const DEFAULT_UNITS = { area: "m²", length: "m" };
 
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
@@ -53,6 +56,12 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
+  // Full feature list for the active file (map bounds, export, cross-page selection).
+  const [allFeatures, setAllFeatures] = useState<FeatureMeasurement[] | null>(null);
+  const [allLoading, setAllLoading] = useState(false);
+  const [allError, setAllError] = useState<string | null>(null);
+  // Guards against a slow full-fetch resolving after the user switched files.
+  const allRequest = useRef(0);
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/health`)
@@ -60,16 +69,37 @@ export default function App() {
       .catch(() => setBackendUp(false));
   }, []);
 
+  const fetchAll = useCallback(async (id: string, info: FileInfo) => {
+    const ticket = (allRequest.current += 1);
+    setAllLoading(true);
+    setAllError(null);
+    try {
+      const bundle = await fetchAllMeasurements(id, info);
+      // Drop the result if the user has since switched files or retried.
+      if (ticket !== allRequest.current) return;
+      setAllFeatures(bundle.features);
+    } catch (err) {
+      if (ticket !== allRequest.current) return;
+      setAllError(describeError(err));
+      setAllFeatures(null);
+    } finally {
+      if (ticket === allRequest.current) setAllLoading(false);
+    }
+  }, []);
+
   const loadFile = useCallback(
     async (id: string, pageLimit: number, offset: number) => {
       setFileLoading(true);
       setPageLoading(true);
       setSelectedId(null);
+      setAllFeatures(null);
+      setAllError(null);
       try {
         const info = await getFileInfo(id);
         setFileInfo(info);
         const pg = await getMeasurements(id, pageLimit, offset);
         setPage(pg);
+        void fetchAll(id, info);
       } catch (err) {
         setBanner(describeError(err));
       } finally {
@@ -77,7 +107,7 @@ export default function App() {
         setPageLoading(false);
       }
     },
-    [],
+    [fetchAll],
   );
 
   const handleUploaded = useCallback(
@@ -103,19 +133,33 @@ export default function App() {
   );
 
   const changePage = useCallback(
-    (nextLimit: number, offset: number) => {
+    (nextLimit: number, offset: number, opts?: { preserveSelection?: boolean }) => {
       if (!activeId) return;
       setLimit(nextLimit);
       setPageLoading(true);
       getMeasurements(activeId, nextLimit, offset)
         .then((pg) => {
           setPage(pg);
-          setSelectedId(null);
+          if (!opts?.preserveSelection) setSelectedId(null);
         })
         .catch((err: unknown) => setBanner(describeError(err)))
         .finally(() => setPageLoading(false));
     },
     [activeId],
+  );
+
+  /** Map (or dashboard preview) selection: highlight everywhere, paging the
+   *  table to the feature when it lives on another page. */
+  const handleMapSelect = useCallback(
+    (f: FeatureMeasurement) => {
+      setSelectedId(f.feature_id);
+      const onPage = page?.features.some((p) => p.feature_id === f.feature_id) ?? false;
+      if (!onPage && allFeatures) {
+        const idx = allFeatures.findIndex((a) => a.feature_id === f.feature_id);
+        if (idx >= 0) changePage(limit, Math.floor(idx / limit) * limit, { preserveSelection: true });
+      }
+    },
+    [page, allFeatures, changePage, limit],
   );
 
   const handleDelete = useCallback(async () => {
@@ -127,16 +171,30 @@ export default function App() {
       setActiveId(null);
       setFileInfo(null);
       setPage(null);
+      setSelectedId(null);
+      setAllFeatures(null);
+      setAllError(null);
       setBanner(null);
     } catch (err) {
       setBanner(describeError(err));
     }
   }, [activeId]);
 
+  const retryAll = useCallback(() => {
+    if (activeId && fileInfo) void fetchAll(activeId, fileInfo);
+  }, [activeId, fileInfo, fetchAll]);
+
   const selectedFeature: FeatureMeasurement | null = useMemo(
-    () => page?.features.find((f) => f.feature_id === selectedId) ?? null,
-    [page, selectedId],
+    () =>
+      allFeatures?.find((f) => f.feature_id === selectedId) ??
+      page?.features.find((f) => f.feature_id === selectedId) ??
+      null,
+    [allFeatures, page, selectedId],
   );
+
+  // Map + export prefer the full list; the current page is the honest fallback.
+  const mapFeatures = allFeatures ?? page?.features ?? [];
+  const exportUnits = page?.units ?? DEFAULT_UNITS;
 
   return (
     <div className="flex min-h-screen">
@@ -211,7 +269,7 @@ export default function App() {
               <span className="hidden max-w-48 truncate text-sm text-slate-600 sm:block">
                 {fileInfo.filename}
               </span>
-              <Button variant="danger" size="sm" onClick={() => void handleDelete()}>
+              <Button variant="danger" size="sm" onClick={() => void handleDelete()} aria-label={`Delete ${fileInfo.filename}`}>
                 <Trash2 className="h-4 w-4" aria-hidden /> Delete
               </Button>
             </div>
@@ -243,16 +301,57 @@ export default function App() {
 
           {view === "dashboard" && (
             <section aria-label="Dashboard">
-              {fileLoading && !fileInfo ? (
-                <Spinner label="Loading file" />
-              ) : fileInfo ? (
-                <Dashboard file={fileInfo} page={page} sessionUploads={uploads.length} />
+              {!fileInfo && !fileLoading ? (
+                <div className="space-y-6">
+                  <EmptyState
+                    icon={<LayoutDashboard className="h-10 w-10" aria-hidden />}
+                    title="No dataset selected"
+                    hint="Upload a .kml file or .zip Shapefile archive to see feature counts, area/length totals, CRS details, and a live map preview here."
+                  />
+                  <MapCard
+                    title="Dataset preview"
+                    features={[]}
+                    totalCount={null}
+                    loading={false}
+                    error={null}
+                    selectedId={null}
+                    onSelect={() => undefined}
+                    emptyHint="Nothing to plot yet — upload a dataset and its real geometries will appear here."
+                  />
+                </div>
               ) : (
-                <EmptyState
-                  icon={<LayoutDashboard className="h-10 w-10" aria-hidden />}
-                  title="No dataset selected"
-                  hint="Upload a .kml file or .zip Shapefile archive to see feature counts, area/length totals, and CRS details here."
-                />
+                <div className="space-y-6">
+                  <Dashboard
+                    file={fileInfo}
+                    page={page}
+                    sessionUploads={uploads.length}
+                    loading={fileLoading}
+                    mapFeatures={mapFeatures}
+                    mapLoading={allLoading}
+                    mapError={allError}
+                    onRetryMap={retryAll}
+                    selectedId={selectedId}
+                    onSelectFeature={handleMapSelect}
+                  />
+                  {fileInfo && (
+                  <Card>
+                    <CardHeader>
+                      <h2 className="font-semibold">Data export</h2>
+                      <p className="text-xs text-slate-500">
+                        Download every measurement for {fileInfo.filename} across all pages.
+                      </p>
+                    </CardHeader>
+                    <CardBody>
+                      <ExportPanel
+                        file={fileInfo}
+                        units={exportUnits}
+                        cachedFeatures={allFeatures}
+                        disabled={fileLoading}
+                      />
+                    </CardBody>
+                  </Card>
+                  )}
+                </div>
               )}
               {uploads.length > 0 && (
                 <Card className="mt-6">
@@ -269,6 +368,7 @@ export default function App() {
                         <li key={u.id}>
                           <button
                             onClick={() => selectUpload(u.id)}
+                            aria-current={activeId === u.id ? "true" : undefined}
                             className={cn(
                               "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm",
                               "hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
@@ -322,55 +422,20 @@ export default function App() {
                 />
               ) : (
                 <>
-                  <Card>
-                    <CardBody>
-                      {pageLoading && !page ? (
-                        <Spinner label="Loading geometries" />
-                      ) : (
-                        <FeatureMap
-                          features={page?.features ?? []}
-                          selectedId={selectedId}
-                          onSelect={(f) => setSelectedId(f.feature_id)}
-                        />
-                      )}
-                    </CardBody>
-                  </Card>
+                  <MapCard
+                    title={`Map — ${fileInfo.filename}`}
+                    subtitle={`Source ${fileInfo.crs ?? "unknown"} → measured in ${fileInfo.measurement_crs ?? "—"} · click a geometry to inspect it`}
+                    features={mapFeatures}
+                    totalCount={fileInfo.feature_count}
+                    loading={allLoading && mapFeatures.length === 0}
+                    error={allError}
+                    onRetry={retryAll}
+                    selectedId={selectedId}
+                    onSelect={handleMapSelect}
+                    emptyHint="This file has no renderable geometries on record."
+                  />
                   {selectedFeature && (
-                    <Card>
-                      <CardHeader>
-                        <h2 className="font-semibold">
-                          Selected: {featureDisplayName(selectedFeature)}
-                        </h2>
-                      </CardHeader>
-                      <CardBody className="grid gap-3 text-sm sm:grid-cols-2">
-                        <div>
-                          <p className="text-xs uppercase tracking-wide text-slate-500">Geometry</p>
-                          <p>{selectedFeature.geometry_type}</p>
-                          <p className="mt-2 text-xs uppercase tracking-wide text-slate-500">
-                            Measurement
-                          </p>
-                          <p className="font-medium">{formatMeasurement(selectedFeature)}</p>
-                          <p className="mt-1">
-                            <Badge status={selectedFeature.measurement_status}>
-                              {selectedFeature.measurement_status.replaceAll("_", " ")}
-                            </Badge>
-                          </p>
-                          {selectedFeature.error_details && (
-                            <p className="mt-1 text-xs text-amber-700">
-                              {selectedFeature.error_details}
-                            </p>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs uppercase tracking-wide text-slate-500">
-                            Properties
-                          </p>
-                          <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-50 p-3 text-xs">
-                            {JSON.stringify(selectedFeature.properties ?? {}, null, 2)}
-                          </pre>
-                        </div>
-                      </CardBody>
-                    </Card>
+                    <FeatureDetailsPanel feature={selectedFeature} file={fileInfo} />
                   )}
                 </>
               )}
@@ -378,7 +443,7 @@ export default function App() {
           )}
 
           {view === "table" && (
-            <section aria-label="Measurements">
+            <section aria-label="Measurements" className="space-y-4">
               {!fileInfo ? (
                 <EmptyState
                   icon={<Table2 className="h-10 w-10" aria-hidden />}
@@ -386,24 +451,37 @@ export default function App() {
                   hint="Upload a dataset to browse per-feature measurements from the live GET measurements endpoint."
                 />
               ) : (
-                <Card>
-                  <CardHeader>
-                    <h2 className="font-semibold">Feature measurements</h2>
-                    <p className="text-xs text-slate-500">
-                      Source {fileInfo.crs ?? "unknown"} → measured in{" "}
-                      {fileInfo.measurement_crs ?? "—"}. Click a row to highlight it.
-                    </p>
-                  </CardHeader>
-                  <CardBody>
-                    <MeasurementTable
-                      page={page}
-                      loading={pageLoading}
-                      selectedId={selectedId}
-                      onSelect={setSelectedId}
-                      onPage={changePage}
-                    />
-                  </CardBody>
-                </Card>
+                <>
+                  <Card>
+                    <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h2 className="font-semibold">Feature measurements</h2>
+                        <p className="text-xs text-slate-500">
+                          Source {fileInfo.crs ?? "unknown"} → measured in{" "}
+                          {fileInfo.measurement_crs ?? "—"}. Click a row to highlight it.
+                        </p>
+                      </div>
+                      <ExportPanel
+                        file={fileInfo}
+                        units={exportUnits}
+                        cachedFeatures={allFeatures}
+                        disabled={pageLoading}
+                      />
+                    </CardHeader>
+                    <CardBody>
+                      <MeasurementTable
+                        page={page}
+                        loading={pageLoading}
+                        selectedId={selectedId}
+                        onSelect={setSelectedId}
+                        onPage={(l, o) => changePage(l, o)}
+                      />
+                    </CardBody>
+                  </Card>
+                  {selectedFeature && (
+                    <FeatureDetailsPanel feature={selectedFeature} file={fileInfo} />
+                  )}
+                </>
               )}
             </section>
           )}
@@ -412,7 +490,8 @@ export default function App() {
             <Alert tone="warning" title="Processing failed">
               {fileInfo.error_summary ?? "The file could not be processed."}{" "}
               <span className="inline-flex items-center gap-1">
-                <AlertTriangle className="h-4 w-4" aria-hidden /> Try a different file.
+                <AlertTriangle className="h-4 w-4" aria-hidden /> Try uploading a valid .kml or
+                .zip Shapefile instead.
               </span>
             </Alert>
           )}

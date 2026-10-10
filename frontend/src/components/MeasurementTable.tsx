@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowDownWideNarrow, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle, ArrowDownWideNarrow, ChevronLeft, ChevronRight } from "lucide-react";
 import type { MeasurementsPage } from "../lib/api";
 import { featureDisplayName, formatMeasurement } from "../lib/format";
 import { Badge, Button, Spinner } from "./ui";
@@ -131,13 +131,16 @@ export function MeasurementTable({ page, loading, selectedId, onSelect, onPage }
                 <tr
                   key={f.feature_id}
                   onClick={() => onSelect(selectedId === f.feature_id ? null : f.feature_id)}
+                  aria-selected={selectedId === f.feature_id}
                   className={cn(
-                    "cursor-pointer hover:bg-emerald-50",
+                    "cursor-pointer hover:bg-emerald-50 focus-visible:outline-none",
                     selectedId === f.feature_id && "bg-emerald-100/60",
                   )}
                 >
                   <td className="px-4 py-2 font-mono">{f.feature_id}</td>
-                  <td className="px-4 py-2">{f.geometry_type}</td>
+                  <td className="px-4 py-2">
+                    <Badge status={f.geometry_type}>{f.geometry_type}</Badge>
+                  </td>
                   <td className="max-w-48 truncate px-4 py-2" title={featureDisplayName(f)}>
                     {featureDisplayName(f)}
                   </td>
@@ -148,8 +151,19 @@ export function MeasurementTable({ page, loading, selectedId, onSelect, onPage }
                       {f.measurement_status.replaceAll("_", " ")}
                     </Badge>
                   </td>
-                  <td className="max-w-64 truncate px-4 py-2 text-xs text-slate-500" title={f.error_details ?? ""}>
-                    {f.error_details ?? "—"}
+                  <td className="max-w-64 px-4 py-2 text-xs text-slate-500">
+                    {f.error_details ? (
+                      <span className="flex items-start gap-1" title={f.error_details}>
+                        <AlertTriangle
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600"
+                          aria-label="Measurement error"
+                          role="img"
+                        />
+                        <span className="truncate">{f.error_details}</span>
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                 </tr>
               ))}

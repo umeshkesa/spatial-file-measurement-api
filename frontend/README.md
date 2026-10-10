@@ -40,8 +40,28 @@ configured in the backend with `CORS_ALLOWED_ORIGINS`
 ```bash
 npm run build   # tsc typecheck + production bundle into dist/
 npm run lint    # oxlint
+npm test        # vitest unit tests (export helpers, 24 tests)
 npm run preview # serve the production bundle locally
 ```
+
+Live end-to-end export test (uploads the real `sample_data/` files, walks real API
+pagination, asserts CSV/JSON content) — backend must be running:
+
+```bash
+SPATIAL_LIVE_API=1 VITE_API_BASE_URL=http://127.0.0.1:8000 npm test -- live-export
+```
+
+## Features
+
+- **Dashboard**: stat cards, CRS/status, interactive dataset preview map (reset-view
+  action, click-to-select), full-dataset CSV/JSON export, session upload history.
+- **Map**: all file geometries on OpenStreetMap, selection synced with the table
+  (selecting an off-page feature jumps the table to its page).
+- **Measurements**: paginated table with geometry/status badges, filters, sorting,
+  error indicators, export buttons, and a details panel (raw geometry collapsible).
+- **Export**: `*_measurements_YYYY-MM-DD.csv` (all pages, RFC-4180 escaping,
+  `'`-prefix formula guard, empty value for NOT_APPLICABLE) and readable JSON with
+  file metadata + all records. No partial export is ever labeled complete.
 
 ## Notes
 

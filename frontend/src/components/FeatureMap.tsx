@@ -9,6 +9,8 @@ interface Props {
   features: FeatureMeasurement[];
   selectedId: number | null;
   onSelect: (f: FeatureMeasurement) => void;
+  /** Increment to refit the viewport to the feature bounds. */
+  fitSignal?: number;
 }
 
 type RichProps = { __fid: number; __name: string };
@@ -77,7 +79,7 @@ function toRenderable(features: FeatureMeasurement[]): RichFeature[] {
   return out;
 }
 
-function FitBounds({ collection }: { collection: FeatureCollection }) {
+function FitBounds({ collection, signal }: { collection: FeatureCollection; signal: number }) {
   const map = useMap();
   useEffect(() => {
     const pts: Array<[number, number]> = [];
@@ -88,11 +90,11 @@ function FitBounds({ collection }: { collection: FeatureCollection }) {
     if (pts.length === 0) return;
     const latlngs = pts.map(([lng, lat]) => [lat, lng] as [number, number]);
     map.fitBounds(L.latLngBounds(latlngs).pad(0.15));
-  }, [collection, map]);
+  }, [collection, map, signal]);
   return null;
 }
 
-export function FeatureMap({ features, selectedId, onSelect }: Props) {
+export function FeatureMap({ features, selectedId, onSelect, fitSignal = 0 }: Props) {
   const collection = useMemo<FeatureCollection>(
     () => ({ type: "FeatureCollection", features: toRenderable(features) }),
     [features],
@@ -135,7 +137,7 @@ export function FeatureMap({ features, selectedId, onSelect }: Props) {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <FitBounds collection={collection} />
+      <FitBounds collection={collection} signal={fitSignal} />
       <GeoJSON
         key={`${selectedId ?? "none"}-${collection.features.length}`}
         data={collection}

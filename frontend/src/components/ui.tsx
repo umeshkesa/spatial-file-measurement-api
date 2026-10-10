@@ -46,6 +46,13 @@ const badgeTones: Record<string, string> = {
   FAILED: "bg-red-100 text-red-800",
   NOT_APPLICABLE: "bg-slate-200 text-slate-600",
   UNSUPPORTED: "bg-orange-100 text-orange-800",
+  Polygon: "bg-teal-100 text-teal-800",
+  MultiPolygon: "bg-teal-100 text-teal-800",
+  LineString: "bg-sky-100 text-sky-800",
+  MultiLineString: "bg-sky-100 text-sky-800",
+  Point: "bg-violet-100 text-violet-800",
+  MultiPoint: "bg-violet-100 text-violet-800",
+  GeometryCollection: "bg-orange-100 text-orange-800",
 };
 
 export function Badge({ status, children }: { status?: string; children: ReactNode }) {
@@ -109,8 +116,16 @@ export function ProgressBar({ value }: { value: number }) {
   );
 }
 
-export function EmptyState({
-  icon,
+export function Skeleton({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={cn("animate-pulse rounded-lg bg-slate-200", className ?? "h-4 w-full")}
+    />
+  );
+}
+
+export function EmptyState({  icon,
   title,
   hint,
 }: {
