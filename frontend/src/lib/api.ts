@@ -41,6 +41,15 @@ export type GeometryObject = {
   geometries?: GeometryObject[];
 } | null;
 
+export interface ComponentMeasurement {
+  geometry_type: string;
+  measurement_type: string | null;
+  measurement_value: number | null;
+  measurement_unit: string | null;
+  measurement_status: string;
+  error_details: string | null;
+}
+
 export interface FeatureMeasurement {
   feature_id: number;
   geometry_type: string;
@@ -49,6 +58,8 @@ export interface FeatureMeasurement {
   measurement: MeasurementDetail | null;
   measurement_status: string;
   error_details: string | null;
+  /** Per-component breakdown for GeometryCollection features (PARTIAL); otherwise null. */
+  components: ComponentMeasurement[] | null;
 }
 
 export interface MeasurementsPage {

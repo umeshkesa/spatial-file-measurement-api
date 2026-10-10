@@ -171,6 +171,7 @@ export function buildJsonExport(bundle: ExportBundle): string {
       measurement: f.measurement,
       measurement_status: f.measurement_status,
       error_details: f.error_details,
+      components: f.components,
     })),
   };
   return JSON.stringify(doc, null, 2);

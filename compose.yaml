@@ -1,6 +1,7 @@
 services:
   api:
-    build: .
+    build:
+      context: ./backend
     ports:
       - "8000:8000"
     environment:
@@ -8,5 +9,5 @@ services:
       STORAGE_DIR: ./uploads
       MAX_UPLOAD_BYTES: 26214400
     volumes:
-      - ./uploads:/code/uploads
-      - ./spatial.db:/code/spatial.db
+      - ./backend/uploads:/code/uploads
+      - ./backend/spatial.db:/code/spatial.db

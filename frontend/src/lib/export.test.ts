@@ -30,6 +30,7 @@ function feat(partial: Partial<FeatureMeasurement> & { feature_id: number }): Fe
     measurement: null,
     measurement_status: "COMPLETED",
     error_details: null,
+    components: null,
     ...partial,
   };
 }
@@ -122,6 +123,26 @@ describe("buildCsv", () => {
   });
   it("handles empty feature lists (header only)", () => {
     expect(buildCsv({ file: FILE, units: {}, features: [] })).toBe(`${CSV_COLUMNS.join(",")}\r\n`);
+  });
+  it("keeps PARTIAL rows single-line with empty value and carries components in JSON", () => {
+    const partial = feat({
+      feature_id: 5,
+      geometry_type: "GeometryCollection",
+      measurement: null,
+      measurement_status: "PARTIAL",
+      error_details: null,
+      components: [
+        { geometry_type: "Point", measurement_type: null, measurement_value: null, measurement_unit: null, measurement_status: "NOT_APPLICABLE", error_details: null },
+      ],
+    });
+    const csv = buildCsv({ file: FILE, units: {}, features: [partial] });
+    const cols = csv.split("\r\n").filter((l) => l.length > 0)[1].split(",");
+    expect(cols[CSV_COLUMNS.indexOf("measurement_value")]).toBe("");
+    expect(cols[CSV_COLUMNS.indexOf("measurement_status")]).toBe("PARTIAL");
+    const doc = JSON.parse(
+      buildJsonExport({ file: FILE, units: {}, features: [partial] }),
+    ) as { features: Array<{ components: unknown[] }> };
+    expect(doc.features[0].components).toHaveLength(1);
   });
 });
 

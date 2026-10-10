@@ -80,8 +80,9 @@ def test_empty_geometry_preserved_with_failed_status(isolated_client, tmp_dir):
 def test_single_feature_failure_does_not_lose_others(isolated_client):
     """One bad geometry must not discard the good measurements.
 
-    KML MultiGeometry parses as a GeometryCollection (unsupported measurement)
-    and an empty-coordinates polygon parses as an empty geometry (FAILED).
+    KML MultiGeometry parses as a GeometryCollection (per-component PARTIAL
+    measurement) and an empty-coordinates polygon parses as an empty
+    geometry (FAILED).
     """
     client, _ = isolated_client
     data = _build_kml_bytes(
@@ -102,8 +103,13 @@ def test_single_feature_failure_does_not_lose_others(isolated_client):
     assert body["total"] == 3
     by_id = {f["feature_id"]: f for f in body["features"]}
     assert by_id[0]["measurement_status"] == "COMPLETED"
-    assert by_id[1]["measurement_status"] == "UNSUPPORTED"
+    assert by_id[1]["measurement_status"] == "PARTIAL"
     assert by_id[2]["measurement_status"] == "FAILED"
+    # Per-component breakdown: point not applicable, line measured.
+    components = {c["geometry_type"]: c for c in by_id[1]["components"]}
+    assert components["Point"]["measurement_status"] == "NOT_APPLICABLE"
+    assert components["LineString"]["measurement_status"] == "COMPLETED"
+    assert components["LineString"]["measurement_value"] > 0
     info = client.get(f"/api/files/{fid}/").json()
     assert info["status"] == "COMPLETED_WITH_ERRORS"
 

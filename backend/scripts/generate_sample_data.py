@@ -9,7 +9,9 @@ import geopandas as gpd
 from shapely.geometry import LineString, Polygon
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "sample_data"
+# Sample data is shared at the repository root (used by the backend and
+# by the frontend e2e suite), so go one level above backend/.
+OUT = ROOT.parent / "sample_data"
 OUT.mkdir(parents=True, exist_ok=True)
 
 KML = """<?xml version="1.0" encoding="UTF-8"?>

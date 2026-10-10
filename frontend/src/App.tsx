@@ -280,7 +280,7 @@ export default function App() {
           {backendUp === false && (
             <Alert title="Backend unreachable">
               Cannot reach the API at <code>{API_BASE_URL}</code>. Start it with{" "}
-              <code>uvicorn app.main:app --reload</code> from the repository root, then reload
+              <code>uvicorn app.main:app --reload</code> from the backend/ directory, then reload
               this page.
             </Alert>
           )}

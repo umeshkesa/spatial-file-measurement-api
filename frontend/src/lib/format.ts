@@ -3,7 +3,13 @@ import type { FeatureMeasurement } from "./api";
 /** Format a measurement value with units; points show "Not applicable". */
 export function formatMeasurement(f: FeatureMeasurement): string {
   if (!f.measurement || f.measurement.value === null) {
-    return f.measurement_status === "NOT_APPLICABLE" ? "Not applicable" : "—";
+    if (f.measurement_status === "NOT_APPLICABLE") return "Not applicable";
+    if (f.measurement_status === "PARTIAL") {
+      const n = f.components?.length ?? 0;
+      const done = f.components?.filter((c) => c.measurement_status === "COMPLETED").length ?? 0;
+      return n > 0 ? `Partial — ${done} of ${n} parts measured` : "Partial";
+    }
+    return "—";
   }
   const v = f.measurement.value;
   const pretty =

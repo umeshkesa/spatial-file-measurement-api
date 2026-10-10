@@ -46,6 +46,7 @@ const badgeTones: Record<string, string> = {
   FAILED: "bg-red-100 text-red-800",
   NOT_APPLICABLE: "bg-slate-200 text-slate-600",
   UNSUPPORTED: "bg-orange-100 text-orange-800",
+  PARTIAL: "bg-cyan-100 text-cyan-800",
   Polygon: "bg-teal-100 text-teal-800",
   MultiPolygon: "bg-teal-100 text-teal-800",
   LineString: "bg-sky-100 text-sky-800",

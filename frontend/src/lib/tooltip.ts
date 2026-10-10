@@ -29,6 +29,16 @@ export function buildFeatureTooltipHtml(f: FeatureMeasurement): string {
     `<div class="spatial-tip-row"><span>Measured</span><strong>${measurement}</strong></div>`,
     `<div class="spatial-tip-row"><span>Status</span><strong>${status}</strong></div>`,
   ];
+  if (f.measurement_status === "PARTIAL" && f.components) {
+    for (const c of f.components.slice(0, 4)) {
+      const label = escapeHtml(
+        c.measurement_value != null && c.measurement_unit
+          ? `${c.geometry_type}: ${c.measurement_value.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${c.measurement_unit}`
+          : `${c.geometry_type}: ${c.measurement_status.replaceAll("_", " ").toLowerCase()}`,
+      );
+      rows.push(`<div class="spatial-tip-row"><span>Part</span><strong>${label}</strong></div>`);
+    }
+  }
   if (error) rows.push(`<div class="spatial-tip-error">${error}</div>`);
   return rows.join("");
 }

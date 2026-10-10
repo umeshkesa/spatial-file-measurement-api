@@ -7,7 +7,7 @@ export default defineConfig({
   webServer: [
     {
       command: "python -m uvicorn app.main:app --port 8128",
-      cwd: "..",
+      cwd: "../backend",
       url: "http://127.0.0.1:8128/health",
       timeout: 60000,
     },

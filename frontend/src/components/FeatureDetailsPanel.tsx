@@ -56,6 +56,33 @@ export function FeatureDetailsPanel({ feature, file }: Props) {
           </p>
         )}
 
+        {feature.components && feature.components.length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Collection components ({feature.components.length})
+            </p>
+            <ul className="mt-1 divide-y divide-slate-100 rounded-lg ring-1 ring-slate-200">
+              {feature.components.map((c, i) => (
+                <li key={i} className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-sm">
+                  <span className="flex items-center gap-2">
+                    <Badge status={c.geometry_type}>{c.geometry_type}</Badge>
+                    <span className="font-medium">
+                      {c.measurement_value != null && c.measurement_unit
+                        ? `${c.measurement_value.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${c.measurement_unit}`
+                        : c.measurement_status === "NOT_APPLICABLE"
+                          ? "Not applicable"
+                          : "—"}
+                    </span>
+                  </span>
+                  <Badge status={c.measurement_status}>
+                    {c.measurement_status.replaceAll("_", " ")}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="mt-3">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
             Properties ({entries.length})

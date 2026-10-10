@@ -10,6 +10,7 @@ function feat(partial: Partial<FeatureMeasurement> & { feature_id: number }): Fe
     measurement: null,
     measurement_status: "COMPLETED",
     error_details: null,
+    components: null,
     ...partial,
   };
 }
@@ -91,5 +92,41 @@ describe("buildFeatureTooltipHtml", () => {
     );
     expect(html).not.toContain("<img");
     expect(html).toContain("&lt;img");
+  });
+
+  it("lists PARTIAL components with their own values", () => {
+    const html = buildFeatureTooltipHtml(
+      feat({
+        feature_id: 5,
+        geometry_type: "GeometryCollection",
+        properties: { Name: "Mixed Bag" },
+        measurement: null,
+        measurement_status: "PARTIAL",
+        error_details: null,
+        components: [
+          {
+            geometry_type: "Point",
+            measurement_type: null,
+            measurement_value: null,
+            measurement_unit: null,
+            measurement_status: "NOT_APPLICABLE",
+            error_details: null,
+          },
+          {
+            geometry_type: "LineString",
+            measurement_type: "length",
+            measurement_value: 97.84,
+            measurement_unit: "m",
+            measurement_status: "COMPLETED",
+            error_details: null,
+          },
+        ],
+      }),
+    );
+    expect(html).toContain("Mixed Bag");
+    expect(html).toContain("PARTIAL");
+    expect(html).toContain("1 of 2 parts measured");
+    expect(html).toContain("LineString: 97.84 m");
+    expect(html).toContain("Point: not applicable");
   });
 });

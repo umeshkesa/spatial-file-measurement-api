@@ -18,10 +18,12 @@ cp .env.example .env   # optional; defaults to http://127.0.0.1:8000
 ## Run
 
 ```bash
-# Terminal 1 — backend (repository root):
+# Terminal 1 — backend (from the repository root):
+cd backend
 uvicorn app.main:app --reload
 
 # Terminal 2 — frontend:
+cd frontend
 npm run dev   # http://localhost:5173
 ```
 
@@ -60,8 +62,9 @@ SPATIAL_LIVE_API=1 VITE_API_BASE_URL=http://127.0.0.1:8000 npm test -- live-expo
 - **Measurements**: paginated table with geometry/status badges, filters, sorting,
   error indicators, export buttons, and a details panel (raw geometry collapsible).
 - **Export**: `*_measurements_YYYY-MM-DD.csv` (all pages, RFC-4180 escaping,
-  `'`-prefix formula guard, empty value for NOT_APPLICABLE) and readable JSON with
-  file metadata + all records. No partial export is ever labeled complete.
+  `'`-prefix formula guard, empty value for NOT_APPLICABLE/PARTIAL) and readable JSON with
+  file metadata + all records (including per-component `components` breakdowns for
+  GeometryCollections). No partial export is ever labeled complete.
 
 ## Notes
 
