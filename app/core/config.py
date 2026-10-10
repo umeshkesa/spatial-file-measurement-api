@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     max_archive_entries: int = 500
     max_extracted_bytes: int = 209_715_200  # 200 MiB
     log_level: str = "INFO"
+    cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
 
 @lru_cache

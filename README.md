@@ -142,6 +142,31 @@ uvicorn app.main:app --reload
 # or: docker compose up --build
 ```
 
+### Frontend — SpatialLens (`frontend/`)
+
+React + TypeScript + Vite dashboard with upload, CRS-aware stats, Leaflet map, and a
+paginated measurements table, all backed by the live API (no mock data).
+
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:5173  (backend must run on :8000)
+```
+
+- Backend URL: `frontend/.env` → `VITE_API_BASE_URL` (default `http://127.0.0.1:8000`).
+- **CORS:** browsers block cross-origin calls unless the API allows them. The backend
+  enables CORS via the `CORS_ALLOWED_ORIGINS` env var, defaulting to
+  `http://localhost:5173,http://127.0.0.1:5173` — exactly the Vite dev origins. For a
+  different frontend origin, set e.g.
+  `CORS_ALLOWED_ORIGINS=http://localhost:5173,https://app.example.com` and restart.
+  CORS preflight verified: `OPTIONS /api/files/` from `http://localhost:5173` returns
+  `200` with a matching `Access-Control-Allow-Origin`.
+- Production bundle: `npm run build` (typecheck + `dist/`), `npm run preview` to serve
+  it, `npm run lint` for oxlint. Verified: build clean, preview serves `index.html`
+  with the SpatialLens title and bundle.
+- Note: the API exposes no file-list endpoint, so upload history in the UI is
+  session-local; the dashboard always shows the selected file's real data.
+
 ## 12. Swagger UI
 
 Open http://127.0.0.1:8000/docs for interactive Swagger UI (try the upload endpoint
