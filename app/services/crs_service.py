@@ -100,8 +100,9 @@ def select_measurement_crs(source_crs: CRS, gdf: gpd.GeoDataFrame) -> str:
     height = abs(maxy - miny)
     # Antimeridian crossing produces huge width; treat as non-local.
     crosses_antimeridian = width > 180.0
-    out_of_utm_lat = max(abs(miny), abs(maxy)) > 84.0
-    non_local = crosses_antimeridian or out_of_utm_lat or width > 6.0 or height > 8.0
+    # UTM is valid to 84N but only to 80S (polar regions use UPS instead).
+    outside_utm_latitude = maxy > 84.0 or miny < -80.0
+    non_local = crosses_antimeridian or outside_utm_latitude or width > 6.0 or height > 8.0
     if non_local:
         # Large / multi-zone / polar dataset: equal-area global projection.
         return _FALLBACK_EQUAL_AREA

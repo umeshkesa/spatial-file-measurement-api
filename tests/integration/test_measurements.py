@@ -140,3 +140,25 @@ def test_point_handling_in_kml(isolated_client):
     assert feat["geometry_type"] == "Point"
     assert feat["measurement"] is None
     assert feat["measurement_status"] == "NOT_APPLICABLE"
+
+
+def test_hyderabad_kml_selects_utm_zone_44_end_to_end(isolated_client):
+    """Hyderabad (~78.48E, ~17.38N) is in UTM zone 44N: the API must report
+    EPSG:32644 as the measurement CRS with a plausible metric area."""
+    client, _ = isolated_client
+    data = _build_kml_bytes(
+        "<Placemark><name>HYD Plot</name><Polygon><outerBoundaryIs><LinearRing><coordinates>"
+        "78.48,17.38,0 78.481,17.38,0 78.481,17.381,0 78.48,17.381,0 78.48,17.38,0"
+        "</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>"
+    )
+    r = client.post("/api/files/", files={"file": ("hyderabad.kml", data)})
+    assert r.status_code == 201, r.text
+    fid = r.json()["id"]
+    body = client.get(f"/api/files/{fid}/measurements/").json()
+    assert body["source_crs"] == "EPSG:4326"
+    assert body["measurement_crs"] == "EPSG:32644"
+    feat = body["features"][0]
+    assert feat["measurement"]["type"] == "area"
+    assert feat["measurement"]["unit"] == "m²"
+    # 0.001deg x 0.001deg near Hyderabad ~ 107m x 111m ~ 11,800 m^2.
+    assert 5000.0 < feat["measurement"]["value"] < 20000.0

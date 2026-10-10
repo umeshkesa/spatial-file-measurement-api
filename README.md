@@ -267,8 +267,11 @@ Pipeline (`app/services/crs_service.py`):
    with `MISSING_CRS` — guessing would be dishonest.
 2. Metre-based projected source → measure in it directly.
 3. Geographic source → estimate UTM from the dataset centroid (zone from longitude,
-   EPSG:326xx north / 327xx south) for local extents (≤6° wide, ≤8° tall, |lat| ≤ 84°,
-   no antimeridian crossing).
+   EPSG:326xx north / 327xx south) for local extents (≤6° wide, ≤8° tall, latitude
+   within 84°N / 80°S — the true UTM limits, since UPS covers the poles — and no
+   antimeridian crossing). Zone 43 spans 72°E–78°E and zone 44 spans 78°E–84°E, so
+   the Delhi sample (lon 77.0–77.002) correctly measures in EPSG:32643 while a
+   Hyderabad dataset (~78.48°E) correctly measures in EPSG:32644.
 4. Large / multi-zone / polar / antimeridian datasets → global equal-area EPSG:6933.
 5. `GeoDataFrame.to_crs()` transforms every geometry; area/length come from projected
    Shapely math (m² / m). Invalid polygons are repaired with `make_valid` and the
