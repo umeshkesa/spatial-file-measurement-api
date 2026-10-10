@@ -163,3 +163,34 @@ export function representativePointOfMultiPolygon(coordinates: unknown): LngLat 
   if (!bestPoly || bestArea === 0) return null;
   return representativePointOfPolygon(bestPoly);
 }
+
+export type SelectionView =
+  | { kind: "bounds"; southWest: LngLat; northEast: LngLat }
+  | { kind: "point"; at: LngLat }
+  | null;
+
+/**
+ * How the map should frame a selected feature: full bounds for areas/lines
+ * (and GeometryCollection unions), a single center for points or degenerate
+ * geometries, null when nothing valid exists. Pure and unit-tested; the
+ * component translates this into flyTo/flyToBounds calls.
+ */
+export function selectionViewForGeometry(g: unknown): SelectionView {
+  const pts: LngLat[] = [];
+  collectGeometryPositions(g, pts);
+  if (pts.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of pts) {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  if (maxX - minX < 1e-9 && maxY - minY < 1e-9) {
+    return { kind: "point", at: [minX, minY] };
+  }
+  return { kind: "bounds", southWest: [minX, minY], northEast: [maxX, maxY] };
+}

@@ -6,8 +6,8 @@ import L from "leaflet";
 import type { FeatureMeasurement } from "../lib/api";
 import { formatMeasurement } from "../lib/format";
 import {
-  collectGeometryPositions,
   collectPositions,
+  selectionViewForGeometry,
   representativePointOfMultiPolygon,
   representativePointOfPolygon,
   type LngLat,
@@ -162,8 +162,16 @@ function ZoomTracker({ onZoom }: { onZoom: (zoom: number) => void }) {
   return null;
 }
 
-/** Pan/zoom to a table-selected feature only when it is outside the viewport,
- *  keeping nearby context visible instead of hiding it. */
+/** Detail zoom used when centering on a point feature (configurable). */
+export const POINT_FOCUS_ZOOM = 16;
+/** Cap so small polygons/lines frame nicely without an extreme close-up. */
+export const MAX_FEATURE_ZOOM = 17;
+
+/** Pan/zoom to the selected feature (map click or table row):
+ *  - polygons/lines/collections: fit full bounds with pixel padding + max zoom,
+ *    so large features stay whole and tiny ones stay inspectable;
+ *  - points: center at a fixed detail level, never zooming back out;
+ *  - repeats are skipped once the view already frames the feature. */
 function ZoomToSelection({
   features,
   selectedId,
@@ -178,19 +186,35 @@ function ZoomToSelection({
       lastFlown.current = null;
       return;
     }
-    if (lastFlown.current === selectedId) return;
-    lastFlown.current = selectedId;
     const record = features.find((f) => f.feature_id === selectedId);
     if (!record) return;
-    const pts: LngLat[] = [];
-    collectGeometryPositions(record.geometry, pts);
-    if (pts.length === 0) return;
-    const bounds = L.latLngBounds(pts.map(([lng, lat]) => [lat, lng] as [number, number]));
-    if (!bounds.isValid()) return;
+    const view = selectionViewForGeometry(record.geometry);
+    if (!view) return;
     try {
-      if (!map.getBounds().contains(bounds)) {
-        map.flyToBounds(bounds.pad(0.35), { maxZoom: 17, duration: 0.7 });
+      if (view.kind === "point") {
+        const at = L.latLng(view.at[1], view.at[0]);
+        if (lastFlown.current === selectedId && map.getBounds().contains(at)) return;
+        lastFlown.current = selectedId;
+        map.flyTo(at, Math.max(map.getZoom(), POINT_FOCUS_ZOOM), { duration: 0.7 });
+        return;
       }
+      const bounds = L.latLngBounds(
+        [view.southWest[1], view.southWest[0]],
+        [view.northEast[1], view.northEast[0]],
+      );
+      if (!bounds.isValid()) return;
+      const targetZoom = map.getBoundsZoom(bounds, false, L.point(56, 56));
+      const settled =
+        lastFlown.current === selectedId &&
+        map.getZoom() >= targetZoom - 0.25 &&
+        map.getBounds().contains(bounds);
+      if (settled) return;
+      lastFlown.current = selectedId;
+      map.flyToBounds(bounds, {
+        padding: L.point(56, 56),
+        maxZoom: MAX_FEATURE_ZOOM,
+        duration: 0.7,
+      });
     } catch {
       /* invalid bounds on exotic geometries: leave the view alone */
     }

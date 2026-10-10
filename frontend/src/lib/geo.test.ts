@@ -4,6 +4,7 @@ import {
   representativePointOfMultiPolygon,
   representativePointOfPolygon,
   ringArea,
+  selectionViewForGeometry,
   type LngLat,
 } from "./geo";
 
@@ -114,6 +115,42 @@ describe("real sample data (parcels.zip regression)", () => {
       // Distinct markers ~1.5 km apart: both discoverable when zoomed out.
       expect(Math.abs(a[0] - b[0])).toBeGreaterThan(0.005);
     }
+  });
+});
+
+describe("selectionViewForGeometry", () => {
+  it("frames polygons and lines by bounds", () => {
+    const poly = selectionViewForGeometry({ type: "Polygon", coordinates: [SQUARE] });
+    expect(poly).toEqual({ kind: "bounds", southWest: [0, 0], northEast: [4, 4] });
+    const line = selectionViewForGeometry({
+      type: "LineString",
+      coordinates: [[1, 2], [5, 9]],
+    });
+    expect(line).toEqual({ kind: "bounds", southWest: [1, 2], northEast: [5, 9] });
+  });
+  it("centers on points and degenerate geometries", () => {
+    expect(selectionViewForGeometry({ type: "Point", coordinates: [7, 8] })).toEqual({
+      kind: "point",
+      at: [7, 8],
+    });
+    expect(
+      selectionViewForGeometry({ type: "MultiPoint", coordinates: [[3, 3], [3, 3]] }),
+    ).toEqual({ kind: "point", at: [3, 3] });
+  });
+  it("unions GeometryCollection members", () => {
+    const view = selectionViewForGeometry({
+      type: "GeometryCollection",
+      geometries: [
+        { type: "Point", coordinates: [0, 0] },
+        { type: "LineString", coordinates: [[10, 20], [30, 40]] },
+      ],
+    });
+    expect(view).toEqual({ kind: "bounds", southWest: [0, 0], northEast: [30, 40] });
+  });
+  it("returns null for empty or invalid geometries", () => {
+    expect(selectionViewForGeometry(null)).toBeNull();
+    expect(selectionViewForGeometry({})).toBeNull();
+    expect(selectionViewForGeometry({ type: "Polygon", coordinates: [] })).toBeNull();
   });
 });
 
