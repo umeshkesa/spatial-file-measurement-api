@@ -28,3 +28,6 @@ class FeatureRecord(Base):
     measurement_unit: Mapped[str | None] = mapped_column(String(16), nullable=True)
     measurement_status: Mapped[str] = mapped_column(String(32), nullable=False)
     error_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON list of per-component results for GeometryCollection features
+    # (see measurement_service.measure_collection); null otherwise.
+    components_json: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -22,7 +22,7 @@ from app.models.feature_record import FeatureRecord
 from app.models.file_record import FileRecord
 from app.repositories import feature_repository, file_repository
 from app.services import crs_service, geospatial_reader
-from app.services.measurement_service import measure_projected
+from app.services.measurement_service import measure_collection, measure_projected
 
 log = get_logger(__name__)
 
@@ -188,7 +188,24 @@ def process_upload(
                 )
                 n_failed += 1
                 continue
-            result = measure_projected(projected, geometry_type)
+            if geometry_type == "GeometryCollection":
+                result, component_results = measure_collection(projected, geometry_type)
+                components_json = _jsonable(
+                    [
+                        {
+                            "geometry_type": c.geometry_type,
+                            "measurement_type": c.measurement_type,
+                            "measurement_value": c.value,
+                            "measurement_unit": c.unit,
+                            "measurement_status": c.status,
+                            "error_details": c.error,
+                        }
+                        for c in component_results
+                    ]
+                )
+            else:
+                result = measure_projected(projected, geometry_type)
+                components_json = None
             if result.status == "FAILED":
                 n_failed += 1
             elif result.status == "UNSUPPORTED":
@@ -208,6 +225,7 @@ def process_upload(
                     measurement_unit=result.unit,
                     measurement_status=result.status,
                     error_details=err,
+                    components_json=components_json,
                 )
             )
         except Exception as exc:  # last-resort per-feature isolation

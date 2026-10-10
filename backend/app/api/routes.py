@@ -23,6 +23,7 @@ from app.models.feature_record import FeatureRecord
 from app.repositories import feature_repository, file_repository
 from app.schemas.files import FileInfoResponse, FileUploadResponse
 from app.schemas.measurements import (
+    ComponentMeasurement,
     FeatureMeasurement,
     MeasurementDetail,
     MeasurementsResponse,
@@ -143,6 +144,14 @@ def _feature_to_schema(row: FeatureRecord) -> FeatureMeasurement:
             unit=row.measurement_unit or "",
             status=row.measurement_status,
         )
+    components = None
+    if row.components_json:
+        try:
+            raw = json.loads(row.components_json)
+            if isinstance(raw, list):
+                components = [ComponentMeasurement(**c) for c in raw if isinstance(c, dict)]
+        except Exception:
+            components = None
     return FeatureMeasurement(
         feature_id=row.feature_index,
         geometry_type=row.geometry_type,
@@ -151,6 +160,7 @@ def _feature_to_schema(row: FeatureRecord) -> FeatureMeasurement:
         measurement=measurement,
         measurement_status=row.measurement_status,
         error_details=row.error_details,
+        components=components,
     )
 
 

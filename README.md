@@ -16,7 +16,9 @@ Upload a `.kml` file or a `.zip` containing a Shapefile dataset and the API will
    datasets, global equal-area fallback for large ones).
 4. Transform geometries out of angular (degree) coordinates before measuring.
 5. Compute polygon area (m²) and line length (m); points get an explicit
-   `NOT_APPLICABLE` status; unsupported types get `UNSUPPORTED` — never a crash.
+   `NOT_APPLICABLE` status; heterogeneous GeometryCollections get a per-component
+   breakdown with a `PARTIAL` status; truly unsupported types get `UNSUPPORTED` —
+   never a crash.
 6. Persist file metadata + per-feature results in SQLite and expose them via REST.
 
 ## 2. Problem statement and use cases
@@ -79,20 +81,22 @@ no losable background job, bounded by the upload-size limit.
 
 ```
 spatial-file-measurement-api/
-├── app/
-│   ├── main.py                  # app factory, middleware, error handlers, /health /ready
-│   ├── api/{routes.py,dependencies.py}
-│   ├── core/{config.py,exceptions.py,logging.py}
-│   ├── schemas/{files.py,measurements.py}
-│   ├── models/{file_record.py,feature_record.py}
-│   ├── services/{file_service.py,geospatial_reader.py,crs_service.py,measurement_service.py}
-│   ├── repositories/{file_repository.py,feature_repository.py}
-│   └── db/{base.py,session.py,migrations/{env.py,versions/0001_initial.py}}
-├── tests/{conftest.py,unit/,integration/}
-├── sample_data/{survey.kml,parcels.zip}
-├── scripts/{generate_sample_data.py,init_db.py}
-├── alembic.ini  compose.yaml  Dockerfile  LICENSE
-├── requirements.txt  pyproject.toml  .env.example  README.md
+├── backend/
+│   ├── app/
+│   │   ├── main.py                  # app factory, middleware, error handlers, /health /ready
+│   │   ├── api/{routes.py,dependencies.py}
+│   │   ├── core/{config.py,exceptions.py,logging.py}
+│   │   ├── schemas/{files.py,measurements.py}
+│   │   ├── models/{file_record.py,feature_record.py}
+│   │   ├── services/{file_service.py,geospatial_reader.py,crs_service.py,measurement_service.py}
+│   │   ├── repositories/{file_repository.py,feature_repository.py}
+│   │   └── db/{base.py,session.py,migrations/{env.py,versions/0001_initial.py}}
+│   ├── tests/{conftest.py,unit/,integration/}
+│   ├── scripts/{generate_sample_data.py,init_db.py}
+│   ├── requirements.txt  pyproject.toml  alembic.ini  Dockerfile  .env.example
+├── frontend/                        # SpatialLens React + TypeScript app (see below)
+├── sample_data/{survey.kml,parcels.zip}   # shared by backend and frontend e2e tests
+├── compose.yaml  LICENSE  README.md
 ```
 
 ## 7. Prerequisites
@@ -104,23 +108,26 @@ spatial-file-measurement-api/
 
 ## 8. Installation
 
-```bash
+Backend (PowerShell):
+
+```powershell
+cd backend
 python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# macOS/Linux:
-# source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env   # optional; defaults work for local dev
 python scripts/init_db.py
 ```
+
+(macOS/Linux: `python3 -m venv .venv`, `source .venv/bin/activate`,
+`cp .env.example .env`.)
 
 ## 9. Environment configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:///./spatial.db` | File-backed SQLite database |
-| `STORAGE_DIR` | `./uploads` | Stored upload bytes (generated names) |
+| `DATABASE_URL` | `sqlite:///./spatial.db` | File-backed SQLite database (resolved relative to the backend working directory — run from `backend/`, so the DB file is `backend/spatial.db`) |
+| `STORAGE_DIR` | `./uploads` | Stored upload bytes (generated names; likewise `backend/uploads/`) |
 | `MAX_UPLOAD_BYTES` | `26214400` (25 MiB) | Upload cap → HTTP 413 |
 | `MAX_ARCHIVE_ENTRIES` | `500` | ZIP entry cap (bomb protection) |
 | `MAX_EXTRACTED_BYTES` | `209715200` (200 MiB) | Extracted-size cap |
@@ -129,7 +136,7 @@ python scripts/init_db.py
 ## 10. Database initialization and migrations
 
 Tables auto-create on startup (`init_db()`), so a plain `uvicorn` run works. For
-versioned migrations:
+versioned migrations (run from `backend/`):
 
 ```bash
 alembic upgrade head     # applies app/db/migrations/versions/0001_initial.py
@@ -137,9 +144,16 @@ alembic upgrade head     # applies app/db/migrations/versions/0001_initial.py
 
 ## 11. Run the application
 
+Backend (PowerShell, from the repository root):
+
+```powershell
+cd backend
+uvicorn app.main:app --reload   # API: http://127.0.0.1:8000, docs: /docs
+```
+
 ```bash
-uvicorn app.main:app --reload
-# or: docker compose up --build
+# or, from the repository root:
+docker compose up --build
 ```
 
 ### Frontend — SpatialLens (`frontend/`)
@@ -147,11 +161,13 @@ uvicorn app.main:app --reload
 React + TypeScript + Vite dashboard with upload, CRS-aware stats, Leaflet map, and a
 paginated measurements table, all backed by the live API (no mock data).
 
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev   # http://localhost:5173  (backend must run on :8000)
 ```
+
+Open a second terminal for this — the backend keeps running in the first.
 
 - Backend URL: `frontend/.env` → `VITE_API_BASE_URL` (default `http://127.0.0.1:8000`).
 - **CORS:** browsers block cross-origin calls unless the API allows them. The backend
@@ -185,10 +201,11 @@ with `sample_data/survey.kml`). ReDoc at `/redoc`, schema at `/openapi.json`.
 ### POST /api/files/ — upload and process
 
 ```bash
+# from backend/ (sample files live in ../sample_data):
 curl -X POST http://127.0.0.1:8000/api/files/ \
-  -F "file=@sample_data/survey.kml"
+  -F "file=@../sample_data/survey.kml"
 curl -X POST http://127.0.0.1:8000/api/files/ \
-  -F "file=@sample_data/parcels.zip"
+  -F "file=@../sample_data/parcels.zip"
 ```
 
 Success (201):
@@ -324,18 +341,34 @@ projected area is ~10,900 m² — the API could not have skipped reprojection.
 
 ## 17. Tests and linting
 
+Backend (from `backend/`):
+
 ```bash
-python -m pytest tests -q        # 52 tests: 27 unit + 25 integration
-ruff check app tests
-ruff format --check app tests
+python -m pytest tests -q        # 63 tests: unit + integration
+ruff check app tests scripts
+ruff format --check app tests scripts
 ```
+
+Frontend (from `frontend/`): `npm test` (vitest), `npm run lint` (oxlint),
+`npm run build` (typecheck + bundle); Playwright e2e via `npm run test:e2e`
+(see `frontend/README.md`).
 
 Coverage highlights: KML + Shapefile uploads, metadata, paginated measurements, area
 (100×100 square, holes, multipolygons, invalid-polygon repair), length, points,
-empty/null geometries, GeometryCollection `UNSUPPORTED`, per-feature isolation,
-EPSG:4326 transformation proof, units, missing CRS, invalid KML/ZIP, bad extensions,
-unknown IDs, size limits, ZIP traversal, persistence across sessions, error-shape
-consistency. Tests use isolated temp SQLite DBs and storage — never real user data.
+empty/null geometries, GeometryCollection per-component `PARTIAL` breakdowns,
+per-feature isolation, EPSG:4326 transformation proof, units, missing CRS, invalid
+KML/ZIP, bad extensions, unknown IDs, size limits, ZIP traversal, persistence across
+sessions, error-shape consistency, and the exact `sample_data/geometry_catalog.kml`
+fixture (7 placemarks: courtyard-hole ratio, both-fields area, mixed-bag components,
+empty-polygon failure). Tests use isolated temp SQLite DBs and storage — never real
+user data.
+
+Schema note: `GET measurements` features carry an additive, optional `components`
+array (per-component type/value/unit/status) that is populated only for
+GeometryCollection features; existing clients ignore it. The matching
+`features.components_json` column arrives via Alembic migration `0002_components`
+— run `alembic upgrade head` against any pre-existing database (fresh databases
+are created with the column by `init_db()`).
 
 ## 18. Design decisions and alternatives
 
@@ -376,7 +409,7 @@ tiling for very large datasets.
   are approximate.
 - Multi-`.shp` archives are concatenated into one feature list (documented).
 - KML network links / embedded resources are never fetched (treated as untrusted).
-- `uploads/` and `spatial.db` are local artifacts (gitignored), not part of the repo.
+- `backend/uploads/` and `backend/spatial.db` are local artifacts (gitignored), not part of the repo. Note: the SQLite path is relative to the backend working directory, so a `spatial.db` created by an older root-level run is intentionally not reused — run from `backend/`.
 
 ## 22. GitHub submission
 
@@ -392,9 +425,9 @@ gh repo create spatial-file-measurement-api --public --source=. --push
 Suggested repo description: “FastAPI service that ingests KML/Shapefile uploads,
 computes CRS-correct area/length measurements, and serves paginated results.”
 
-Suggested commit message: as above. Never commit `.env`, `uploads/`, `*.db`, or
+Suggested commit message: as above. Never commit `.env`, `backend/uploads/`, `*.db`, or
 customer data — `.gitignore` already excludes them. Regenerate samples any time with
-`python scripts/generate_sample_data.py`.
+`python scripts/generate_sample_data.py` (from `backend/`; writes to root `sample_data/`).
 
 ## License
 
