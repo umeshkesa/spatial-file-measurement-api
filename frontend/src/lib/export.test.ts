@@ -31,6 +31,7 @@ function feat(partial: Partial<FeatureMeasurement> & { feature_id: number }): Fe
     measurement_status: "COMPLETED",
     error_details: null,
     components: null,
+    parts: null,
     ...partial,
   };
 }
@@ -80,24 +81,44 @@ describe("toCsvRow", () => {
       geometry_type: "Point",
       measurement: null,
       measurement_status: "NOT_APPLICABLE",
-    }));
+    }), "");
     expect(row.measurement_value).toBe("");
     expect(row.measurement_type).toBe("");
     expect(row.measurement_status).toBe("NOT_APPLICABLE");
+    expect(row.area_ha).toBe("");
   });
   it("preserves a genuine zero measurement", () => {
     const row = toCsvRow(FILE.id, FILE.filename, "EPSG:4326", "EPSG:32643", feat({
       feature_id: 0,
       measurement: { type: "area", value: 0, unit: "m²", status: "COMPLETED" },
-    }));
+    }), "Land 1");
     expect(row.measurement_value).toBe("0");
+    expect(row.label).toBe("Land 1");
+    expect(row.area_ha).toBe("0");
+    expect(row.length_km).toBe("");
   });
   it("preserves full float precision", () => {
     const row = toCsvRow(FILE.id, FILE.filename, "EPSG:4326", "EPSG:32643", feat({
       feature_id: 0,
       measurement: { type: "area", value: 10902.05138908191, unit: "m²", status: "COMPLETED" },
-    }));
+    }), "Land 1");
     expect(row.measurement_value).toBe("10902.05138908191");
+  });
+  it("converts area and length with exact factors", () => {
+    const area = toCsvRow(FILE.id, FILE.filename, "EPSG:4326", "EPSG:32643", feat({
+      feature_id: 0,
+      measurement: { type: "area", value: 10000, unit: "m²", status: "COMPLETED" },
+    }), "Land 1");
+    expect(area.area_ha).toBe("1");
+    expect(area.area_acres).toBe(String(10000 / 4046.8564224));
+    expect(area.length_km).toBe("");
+    const line = toCsvRow(FILE.id, FILE.filename, "EPSG:4326", "EPSG:32643", feat({
+      feature_id: 1,
+      geometry_type: "LineString",
+      measurement: { type: "length", value: 1500, unit: "m", status: "COMPLETED" },
+    }), "");
+    expect(line.length_km).toBe("1.5");
+    expect(line.area_ha).toBe("");
   });
 });
 

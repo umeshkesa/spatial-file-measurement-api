@@ -31,3 +31,6 @@ class FeatureRecord(Base):
     # JSON list of per-component results for GeometryCollection features
     # (see measurement_service.measure_collection); null otherwise.
     components_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON list of per-part results for multi geometries (MultiPolygon,
+    # MultiLineString; see measurement_service.measure_parts); null otherwise.
+    parts_json: Mapped[str | None] = mapped_column(Text, nullable=True)

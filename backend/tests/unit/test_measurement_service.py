@@ -12,7 +12,7 @@ from shapely.geometry import (
     Polygon,
 )
 
-from app.services.measurement_service import measure_collection, measure_projected
+from app.services.measurement_service import measure_collection, measure_parts, measure_projected
 
 
 def test_square_area_100x100():
@@ -151,3 +151,42 @@ def test_collection_with_unsupported_member_reports_it():
     assert overall.status == "UNSUPPORTED"
     assert components[1].status == "UNSUPPORTED"
     assert components[1].error is not None
+
+
+def test_parts_multipolygon_measured_independently():
+    p1 = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+    p2 = Polygon([(20, 20), (25, 20), (25, 25), (20, 25)])
+    mp = MultiPolygon([p1, p2])
+    parts = measure_parts(mp, "MultiPolygon")
+    assert parts is not None and len(parts) == 2
+    assert [p.part_index for p in parts] == [0, 1]
+    assert [p.geometry_type for p in parts] == ["Polygon", "Polygon"]
+    assert [p.value for p in parts] == [100.0, 25.0]
+    assert all(p.measurement_type == "area" and p.unit == "m²" for p in parts)
+    assert all(p.status == "COMPLETED" for p in parts)
+    # Sum of valid parts equals the combined whole within float tolerance.
+    whole = measure_projected(mp, "MultiPolygon")
+    assert abs(sum(p.value for p in parts) - whole.value) < 1e-9 * whole.value
+
+
+def test_parts_multilinestring_measured_independently():
+    ml = MultiLineString([[(0, 0), (0, 10)], [(0, 0), (30, 0)]])
+    parts = measure_parts(ml, "MultiLineString")
+    assert parts is not None and len(parts) == 2
+    assert [p.value for p in parts] == [10.0, 30.0]
+    assert all(p.measurement_type == "length" and p.unit == "m" for p in parts)
+    whole = measure_projected(ml, "MultiLineString")
+    assert abs(sum(p.value for p in parts) - whole.value) < 1e-9 * whole.value
+
+
+def test_parts_single_geometries_need_no_breakdown():
+    assert measure_parts(Polygon([(0, 0), (1, 0), (1, 1)]), "Polygon") is None
+    assert measure_parts(LineString([(0, 0), (1, 1)]), "LineString") is None
+    assert measure_parts(Point(0, 0), "Point") is None
+    assert measure_parts(MultiPoint([(0, 0), (1, 1)]), "MultiPoint") is None
+    assert measure_parts(None, "MultiPolygon") is None
+
+
+def test_parts_empty_multi_has_no_members():
+    assert measure_parts(MultiPolygon(), "MultiPolygon") == []
+    assert measure_parts(MultiLineString(), "MultiLineString") == []

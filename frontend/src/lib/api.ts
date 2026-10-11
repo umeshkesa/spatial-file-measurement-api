@@ -50,6 +50,16 @@ export interface ComponentMeasurement {
   error_details: string | null;
 }
 
+export interface PartMeasurement {
+  part_index: number;
+  geometry_type: string;
+  measurement_type: string | null;
+  measurement_value: number | null;
+  measurement_unit: string | null;
+  measurement_status: string;
+  error_details: string | null;
+}
+
 export interface FeatureMeasurement {
   feature_id: number;
   geometry_type: string;
@@ -60,6 +70,8 @@ export interface FeatureMeasurement {
   error_details: string | null;
   /** Per-component breakdown for GeometryCollection features (PARTIAL); otherwise null. */
   components: ComponentMeasurement[] | null;
+  /** Independent per-part breakdown for multi geometries; null for single types. */
+  parts: PartMeasurement[] | null;
 }
 
 export interface MeasurementsPage {

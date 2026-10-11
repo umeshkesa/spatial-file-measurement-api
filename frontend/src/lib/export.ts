@@ -4,7 +4,16 @@ import {
   type FileInfo,
   type MeasurementsPage,
 } from "./api";
-import { featureDisplayName } from "./format";
+import {
+  M2_PER_ACRE,
+  M2_PER_HECTARE,
+  M_PER_KM,
+  areaOf,
+  assignLandLabels,
+  featureDisplayName,
+  lengthOf,
+} from "./format";
+import { pointCountOf, pointPositionsOf } from "./geo";
 
 /** Page size used when walking the full measurement list for export. */
 export const EXPORT_PAGE_SIZE = 500;
@@ -13,6 +22,7 @@ export const CSV_COLUMNS = [
   "file_id",
   "filename",
   "feature_id",
+  "label",
   "feature_name",
   "geometry_type",
   "source_crs",
@@ -20,8 +30,12 @@ export const CSV_COLUMNS = [
   "measurement_type",
   "measurement_value",
   "measurement_unit",
+  "area_ha",
+  "area_acres",
+  "length_km",
   "measurement_status",
   "error_details",
+  "point_count",
 ] as const;
 
 export interface ExportBundle {
@@ -100,6 +114,7 @@ export interface CsvRow {
   file_id: string;
   filename: string;
   feature_id: number;
+  label: string;
   feature_name: string;
   geometry_type: string;
   source_crs: string;
@@ -107,8 +122,12 @@ export interface CsvRow {
   measurement_type: string;
   measurement_value: string;
   measurement_unit: string;
+  area_ha: string;
+  area_acres: string;
+  length_km: string;
   measurement_status: string;
   error_details: string;
+  point_count: string;
 }
 
 export function toCsvRow(
@@ -117,11 +136,16 @@ export function toCsvRow(
   sourceCrs: string,
   measurementCrs: string,
   f: FeatureMeasurement,
+  label: string,
 ): CsvRow {
+  const area = areaOf(f);
+  const length = lengthOf(f);
+  const points = pointCountOf(f.geometry);
   return {
     file_id: fileId,
     filename,
     feature_id: f.feature_id,
+    label,
     feature_name: featureDisplayName(f),
     geometry_type: f.geometry_type,
     source_crs: sourceCrs,
@@ -131,13 +155,18 @@ export function toCsvRow(
     measurement_type: f.measurement?.type ?? "",
     measurement_value: f.measurement?.value != null ? String(f.measurement.value) : "",
     measurement_unit: f.measurement?.unit ?? "",
+    area_ha: area != null ? String(area / M2_PER_HECTARE) : "",
+    area_acres: area != null ? String(area / M2_PER_ACRE) : "",
+    length_km: length != null ? String(length / M_PER_KM) : "",
     measurement_status: f.measurement_status,
     error_details: f.error_details ?? "",
+    point_count: points === null ? "" : String(points),
   };
 }
 
 export function buildCsv(bundle: ExportBundle): string {
   const lines = [CSV_COLUMNS.join(",")];
+  const labels = assignLandLabels(bundle.features);
   for (const f of bundle.features) {
     const row = toCsvRow(
       bundle.file.id,
@@ -145,6 +174,7 @@ export function buildCsv(bundle: ExportBundle): string {
       bundle.file.crs ?? "",
       bundle.file.measurement_crs ?? "",
       f,
+      labels.get(f.feature_id) ?? "",
     );
     lines.push(CSV_COLUMNS.map((c) => escapeCsvCell(row[c])).join(","));
   }
@@ -152,6 +182,7 @@ export function buildCsv(bundle: ExportBundle): string {
 }
 
 export function buildJsonExport(bundle: ExportBundle): string {
+  const labels = assignLandLabels(bundle.features);
   const doc = {
     file_id: bundle.file.id,
     filename: bundle.file.filename,
@@ -162,27 +193,148 @@ export function buildJsonExport(bundle: ExportBundle): string {
     status: bundle.file.status,
     created_at: bundle.file.created_at,
     error_summary: bundle.file.error_summary,
-    features: bundle.features.map((f) => ({
-      feature_id: f.feature_id,
-      feature_name: featureDisplayName(f),
-      geometry_type: f.geometry_type,
-      geometry: f.geometry,
-      properties: f.properties,
-      measurement: f.measurement,
-      measurement_status: f.measurement_status,
-      error_details: f.error_details,
-      components: f.components,
-    })),
+    features: bundle.features.map((f) => {
+      const area = areaOf(f);
+      const length = lengthOf(f);
+      return {
+        feature_id: f.feature_id,
+        label: labels.get(f.feature_id) ?? null,
+        feature_name: featureDisplayName(f),
+        geometry_type: f.geometry_type,
+        geometry: f.geometry,
+        properties: f.properties,
+        measurement: f.measurement,
+        area_ha: area != null ? area / M2_PER_HECTARE : null,
+        area_acres: area != null ? area / M2_PER_ACRE : null,
+        length_km: length != null ? length / M_PER_KM : null,
+        point_count: pointCountOf(f.geometry),
+        parts: f.parts ?? null,
+        measurement_status: f.measurement_status,
+        error_details: f.error_details,
+        components: f.components,
+      };
+    }),
   };
   return JSON.stringify(doc, null, 2);
 }
 
 /** `survey.kml` -> `survey_measurements_2026-10-10.csv`. */
-export function exportFilename(originalFilename: string, ext: "csv" | "json", now = new Date()): string {
+export function exportFilename(
+  originalFilename: string,
+  ext: "csv" | "json",
+  now = new Date(),
+  suffix = "measurements",
+): string {
   const stem = originalFilename.replace(/\.[^.]*$/, "") || "export";
   const safe = stem.replace(/[^a-zA-Z0-9-_]+/g, "_").replace(/^_+|_+$/g, "") || "export";
   const date = now.toISOString().slice(0, 10);
-  return `${safe}_measurements_${date}.${ext}`;
+  return `${safe}_${suffix}_${date}.${ext}`;
+}
+
+/**
+ * One row per multi-geometry part. Part values come from the backend's
+ * independent per-part measurement (never divided from the combined total).
+ * Single-type features contribute no rows. The feature-level CSV is
+ * intentionally left unchanged for compatibility.
+ */
+export const PARTS_CSV_COLUMNS = [
+  "file_id",
+  "filename",
+  "feature_id",
+  "feature_name",
+  "parent_geometry_type",
+  "part_index",
+  "part_label",
+  "part_geometry_type",
+  "measurement_type",
+  "measurement_value",
+  "measurement_unit",
+  "area_ha",
+  "area_acres",
+  "length_km",
+  "measurement_status",
+  "error_details",
+] as const;
+
+export function buildPartsCsv(bundle: ExportBundle): string {
+  const lines = [PARTS_CSV_COLUMNS.join(",")];
+  for (const f of bundle.features) {
+    const parts = f.parts ?? [];
+    if (parts.length === 0) continue;
+    const name = featureDisplayName(f);
+    for (const p of parts) {
+      const v = p.measurement_value;
+      const areaHa =
+        p.measurement_type === "area" && v != null ? String(v / M2_PER_HECTARE) : "";
+      const areaAc =
+        p.measurement_type === "area" && v != null ? String(v / M2_PER_ACRE) : "";
+      const lengthKm =
+        p.measurement_type === "length" && v != null ? String(v / M_PER_KM) : "";
+      const cells = [
+        bundle.file.id,
+        bundle.file.filename,
+        f.feature_id,
+        name,
+        f.geometry_type,
+        p.part_index,
+        `Part ${p.part_index + 1}`,
+        p.geometry_type,
+        p.measurement_type ?? "",
+        v != null ? String(v) : "",
+        p.measurement_unit ?? "",
+        areaHa,
+        areaAc,
+        lengthKm,
+        p.measurement_status,
+        p.error_details ?? "",
+      ];
+      lines.push(cells.map((c) => escapeCsvCell(c)).join(","));
+    }
+  }
+  return lines.join("\r\n") + "\r\n";
+}
+
+/**
+ * One row per stored point of every Point/MultiPoint feature. X/Y are the
+ * exact source-CRS values (longitude/latitude only when the CRS is
+ * geographic); the `crs` column says which. Features with no usable
+ * positions contribute no rows — never invented coordinates.
+ */
+export const POINTS_CSV_COLUMNS = [
+  "file_id",
+  "filename",
+  "feature_id",
+  "feature_name",
+  "geometry_type",
+  "point_index",
+  "x",
+  "y",
+  "crs",
+] as const;
+
+export function buildPointsCsv(bundle: ExportBundle): string {
+  const lines = [POINTS_CSV_COLUMNS.join(",")];
+  const crs = bundle.file.crs ?? "";
+  for (const f of bundle.features) {
+    const pts = pointPositionsOf(f.geometry);
+    if (!pts || pts.length === 0) continue;
+    const name = featureDisplayName(f);
+    pts.forEach(([x, y], i) => {
+      const cells = [
+        bundle.file.id,
+        bundle.file.filename,
+        f.feature_id,
+        name,
+        f.geometry_type,
+        i,
+        String(x),
+        String(y),
+        crs,
+      ];
+      lines.push(cells.map((c) => escapeCsvCell(c)).join(","));
+    });
+  }
+  return lines.join("\r\n") + "\r\n";
 }
 
 export function downloadTextFile(content: string, mime: string, filename: string): void {

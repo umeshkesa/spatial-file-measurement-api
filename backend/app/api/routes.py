@@ -27,6 +27,7 @@ from app.schemas.measurements import (
     FeatureMeasurement,
     MeasurementDetail,
     MeasurementsResponse,
+    PartMeasurement,
 )
 from app.services import file_service
 from app.services.geospatial_reader import validate_extension
@@ -152,6 +153,14 @@ def _feature_to_schema(row: FeatureRecord) -> FeatureMeasurement:
                 components = [ComponentMeasurement(**c) for c in raw if isinstance(c, dict)]
         except Exception:
             components = None
+    parts = None
+    if row.parts_json:
+        try:
+            raw = json.loads(row.parts_json)
+            if isinstance(raw, list):
+                parts = [PartMeasurement(**c) for c in raw if isinstance(c, dict)]
+        except Exception:
+            parts = None
     return FeatureMeasurement(
         feature_id=row.feature_index,
         geometry_type=row.geometry_type,
@@ -161,6 +170,7 @@ def _feature_to_schema(row: FeatureRecord) -> FeatureMeasurement:
         measurement_status=row.measurement_status,
         error_details=row.error_details,
         components=components,
+        parts=parts,
     )
 
 

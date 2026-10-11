@@ -25,6 +25,18 @@ class ComponentMeasurement(BaseModel):
     error_details: str | None = None
 
 
+class PartMeasurement(BaseModel):
+    """One member of a multi geometry, measured independently."""
+
+    part_index: int
+    geometry_type: str
+    measurement_type: str | None = None
+    measurement_value: float | None = None
+    measurement_unit: str | None = None
+    measurement_status: str
+    error_details: str | None = None
+
+
 class FeatureMeasurement(BaseModel):
     feature_id: int
     geometry_type: str
@@ -37,6 +49,9 @@ class FeatureMeasurement(BaseModel):
     # breakdown (overall status PARTIAL); null otherwise. Additive change:
     # existing clients ignore unknown fields.
     components: list[ComponentMeasurement] | None = None
+    # Present only for multi geometries (MultiPolygon, MultiLineString) with
+    # an independent per-part breakdown; null otherwise. Additive change.
+    parts: list[PartMeasurement] | None = None
 
 
 class MeasurementsResponse(BaseModel):

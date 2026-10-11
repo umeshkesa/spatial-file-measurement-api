@@ -22,7 +22,11 @@ from app.models.feature_record import FeatureRecord
 from app.models.file_record import FileRecord
 from app.repositories import feature_repository, file_repository
 from app.services import crs_service, geospatial_reader
-from app.services.measurement_service import measure_collection, measure_projected
+from app.services.measurement_service import (
+    measure_collection,
+    measure_parts,
+    measure_projected,
+)
 
 log = get_logger(__name__)
 
@@ -206,6 +210,25 @@ def process_upload(
             else:
                 result = measure_projected(projected, geometry_type)
                 components_json = None
+            # Independent per-part breakdown for multi geometries. The combined
+            # feature result above is unchanged; parts are additional detail.
+            parts_json = None
+            part_results = measure_parts(projected, geometry_type)
+            if part_results:
+                parts_json = _jsonable(
+                    [
+                        {
+                            "part_index": p.part_index,
+                            "geometry_type": p.geometry_type,
+                            "measurement_type": p.measurement_type,
+                            "measurement_value": p.value,
+                            "measurement_unit": p.unit,
+                            "measurement_status": p.status,
+                            "error_details": p.error,
+                        }
+                        for p in part_results
+                    ]
+                )
             if result.status == "FAILED":
                 n_failed += 1
             elif result.status == "UNSUPPORTED":
@@ -226,6 +249,7 @@ def process_upload(
                     measurement_status=result.status,
                     error_details=err,
                     components_json=components_json,
+                    parts_json=parts_json,
                 )
             )
         except Exception as exc:  # last-resort per-feature isolation

@@ -31,6 +31,7 @@ import {
   type MeasurementsPage,
 } from "./lib/api";
 import { fetchAllMeasurements } from "./lib/export";
+import { partGeometryOf } from "./lib/geo";
 
 type View = "dashboard" | "upload" | "map" | "table";
 
@@ -54,6 +55,8 @@ export default function App() {
   const [pageLoading, setPageLoading] = useState(false);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  /** Selected multipart part (parent feature stays selected for highlight). */
+  const [selectedPart, setSelectedPart] = useState<{ featureId: number; partIndex: number } | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [backendUp, setBackendUp] = useState<boolean | null>(null);
   // Full feature list for the active file (map bounds, export, cross-page selection).
@@ -92,6 +95,7 @@ export default function App() {
       setFileLoading(true);
       setPageLoading(true);
       setSelectedId(null);
+      setSelectedPart(null);
       setAllFeatures(null);
       setAllError(null);
       try {
@@ -141,6 +145,7 @@ export default function App() {
         .then((pg) => {
           setPage(pg);
           if (!opts?.preserveSelection) setSelectedId(null);
+          if (!opts?.preserveSelection) setSelectedPart(null);
         })
         .catch((err: unknown) => setBanner(describeError(err)))
         .finally(() => setPageLoading(false));
@@ -153,6 +158,7 @@ export default function App() {
   const handleMapSelect = useCallback(
     (f: FeatureMeasurement) => {
       setSelectedId(f.feature_id);
+      setSelectedPart(null);
       const onPage = page?.features.some((p) => p.feature_id === f.feature_id) ?? false;
       if (!onPage && allFeatures) {
         const idx = allFeatures.findIndex((a) => a.feature_id === f.feature_id);
@@ -160,6 +166,40 @@ export default function App() {
       }
     },
     [page, allFeatures, changePage, limit],
+  );
+
+  /** Multipart part selection: parent stays highlighted, map frames the part. */
+  const handleSelectPart = useCallback((featureId: number, partIndex: number | null) => {
+    setSelectedId(featureId);
+    setSelectedPart(partIndex === null ? null : { featureId, partIndex });
+  }, []);
+
+  /** Geometry framing the selected part (derived from stored parent coords). */
+  const partFocus = useMemo(() => {
+    if (!selectedPart || selectedPart.featureId !== selectedId) {
+      return { geometry: undefined as unknown | undefined, key: null as string | null };
+    }
+    const f = (allFeatures ?? page?.features ?? []).find(
+      (x) => x.feature_id === selectedPart.featureId,
+    );
+    const geometry = f ? partGeometryOf(f.geometry, selectedPart.partIndex) : null;
+    if (!geometry) return { geometry: undefined as unknown | undefined, key: null as string | null };
+    return { geometry, key: `${selectedPart.featureId}:${selectedPart.partIndex}` };
+  }, [selectedPart, selectedId, allFeatures, page]);
+
+  /** Table-row selection by ID (dashboard + measurements views share this). */
+  const handleTableSelectId = useCallback(
+    (id: number | null) => {
+      if (id === null) {
+        setSelectedId(null);
+        setSelectedPart(null);
+        return;
+      }
+      const f = (allFeatures ?? page?.features ?? []).find((x) => x.feature_id === id);
+      if (f) handleMapSelect(f);
+      else setSelectedId(id);
+    },
+    [allFeatures, page, handleMapSelect],
   );
 
   const handleDelete = useCallback(async () => {
@@ -172,6 +212,7 @@ export default function App() {
       setFileInfo(null);
       setPage(null);
       setSelectedId(null);
+      setSelectedPart(null);
       setAllFeatures(null);
       setAllError(null);
       setBanner(null);
@@ -332,6 +373,13 @@ export default function App() {
                     onRetryMap={retryAll}
                     selectedId={selectedId}
                     onSelectFeature={handleMapSelect}
+                    allFeatures={allFeatures}
+                    pageLoading={pageLoading}
+                    onPage={(l, o) => changePage(l, o)}
+                    labelSource={allFeatures ?? page?.features ?? []}
+                    onSelectId={handleTableSelectId}
+                    focusGeometry={partFocus.geometry}
+                    focusKey={partFocus.key}
                   />
                   {fileInfo && (
                   <Card>
@@ -433,9 +481,20 @@ export default function App() {
                     selectedId={selectedId}
                     onSelect={handleMapSelect}
                     emptyHint="This file has no renderable geometries on record."
+                    focusGeometry={partFocus.geometry}
+                    focusKey={partFocus.key}
                   />
                   {selectedFeature && (
-                    <FeatureDetailsPanel feature={selectedFeature} file={fileInfo} />
+                    <FeatureDetailsPanel
+                      feature={selectedFeature}
+                      file={fileInfo}
+                      selectedPartIndex={
+                        selectedPart?.featureId === selectedFeature.feature_id
+                          ? selectedPart.partIndex
+                          : null
+                      }
+                      onSelectPart={(i) => handleSelectPart(selectedFeature.feature_id, i)}
+                    />
                   )}
                 </>
               )}
@@ -473,13 +532,23 @@ export default function App() {
                         page={page}
                         loading={pageLoading}
                         selectedId={selectedId}
-                        onSelect={setSelectedId}
+                        onSelect={handleTableSelectId}
                         onPage={(l, o) => changePage(l, o)}
+                        labelSource={allFeatures ?? page?.features ?? []}
                       />
                     </CardBody>
                   </Card>
                   {selectedFeature && (
-                    <FeatureDetailsPanel feature={selectedFeature} file={fileInfo} />
+                    <FeatureDetailsPanel
+                      feature={selectedFeature}
+                      file={fileInfo}
+                      selectedPartIndex={
+                        selectedPart?.featureId === selectedFeature.feature_id
+                          ? selectedPart.partIndex
+                          : null
+                      }
+                      onSelectPart={(i) => handleSelectPart(selectedFeature.feature_id, i)}
+                    />
                   )}
                 </>
               )}

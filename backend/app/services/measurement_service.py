@@ -45,6 +45,70 @@ class ComponentResult:
     error: str | None = None
 
 
+@dataclass
+class PartResult:
+    """One member of a multi geometry, measured independently in the same CRS."""
+
+    part_index: int  # 0-based position within the parent multi geometry
+    geometry_type: str
+    measurement_type: str | None
+    value: float | None
+    unit: str | None
+    status: str  # COMPLETED | NOT_APPLICABLE | UNSUPPORTED | FAILED
+    repaired: bool = False
+    error: str | None = None
+
+
+# Multi geometry types that receive an independent per-part breakdown.
+# MultiPoint is deliberately excluded: point counts already describe it and
+# points carry no area/length measurement.
+MULTI_PART_TYPES = {"MultiPolygon", "MultiLineString"}
+
+
+def measure_parts(geom: BaseGeometry | None, geometry_type: str) -> list[PartResult] | None:
+    """Measure each member of an already-projected multi geometry independently.
+
+    Returns None for single (non-multi) geometry types, which need no part
+    breakdown. Returns an empty list when the multi geometry has no members.
+    Each part is measured with :func:`measure_projected` on its own merits,
+    so part values are never derived by dividing the combined total.
+    Never raises.
+    """
+    if geom is None:
+        return None
+    base = geometry_type.split(" ")[0] if geometry_type else "Unknown"
+    base = base.strip()
+    if base not in MULTI_PART_TYPES:
+        return None
+    try:
+        members = list(geom.geoms)
+    except Exception:
+        return []
+    parts: list[PartResult] = []
+    for i, member in enumerate(members):
+        try:
+            member_type = member.geom_type
+        except Exception:
+            member_type = "Unknown"
+        try:
+            res = measure_projected(member, member_type)
+        except Exception as exc:  # never let one bad part abort the breakdown
+            res = MeasurementResult(None, None, None, "FAILED", error=f"Part failed: {exc}")
+        parts.append(
+            PartResult(
+                part_index=i,
+                geometry_type=member_type,
+                measurement_type=res.measurement_type,
+                value=res.value,
+                unit=res.unit,
+                status=res.status,
+                repaired=res.repaired,
+                error=res.error,
+            )
+        )
+    return parts
+
+
 def _repair(geom: BaseGeometry) -> tuple[BaseGeometry, bool]:
     """Return a valid geometry, repairing with make_valid when needed."""
     try:

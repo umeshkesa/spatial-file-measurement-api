@@ -20,6 +20,10 @@ interface Props {
   onSelect: (f: FeatureMeasurement) => void;
   /** Increment to refit the viewport to the feature bounds. */
   fitSignal?: number;
+  /** Optional single-part geometry to frame instead of the whole feature. */
+  focusGeometry?: unknown;
+  /** Stable key for focusGeometry (e.g. "fid:partIndex"); re-frames on change. */
+  focusKey?: string | null;
 }
 
 type RichProps = { __fid: number; __name: string };
@@ -175,12 +179,16 @@ export const MAX_FEATURE_ZOOM = 17;
 function ZoomToSelection({
   features,
   selectedId,
+  focusGeometry,
+  focusKey,
 }: {
   features: FeatureMeasurement[];
   selectedId: number | null;
+  focusGeometry?: unknown;
+  focusKey?: string | null;
 }) {
   const map = useMap();
-  const lastFlown = useRef<number | null>(null);
+  const lastFlown = useRef<string | null>(null);
   useEffect(() => {
     if (selectedId === null) {
       lastFlown.current = null;
@@ -188,13 +196,16 @@ function ZoomToSelection({
     }
     const record = features.find((f) => f.feature_id === selectedId);
     if (!record) return;
-    const view = selectionViewForGeometry(record.geometry);
+    // A selected multipart part frames just that part; the parent feature
+    // keeps the highlight (one Leaflet layer per feature).
+    const view = selectionViewForGeometry(focusGeometry ?? record.geometry);
     if (!view) return;
+    const flownKey = focusKey ?? String(selectedId);
     try {
       if (view.kind === "point") {
         const at = L.latLng(view.at[1], view.at[0]);
-        if (lastFlown.current === selectedId && map.getBounds().contains(at)) return;
-        lastFlown.current = selectedId;
+        if (lastFlown.current === flownKey && map.getBounds().contains(at)) return;
+        lastFlown.current = flownKey;
         map.flyTo(at, Math.max(map.getZoom(), POINT_FOCUS_ZOOM), { duration: 0.7 });
         return;
       }
@@ -205,11 +216,11 @@ function ZoomToSelection({
       if (!bounds.isValid()) return;
       const targetZoom = map.getBoundsZoom(bounds, false, L.point(56, 56));
       const settled =
-        lastFlown.current === selectedId &&
+        lastFlown.current === flownKey &&
         map.getZoom() >= targetZoom - 0.25 &&
         map.getBounds().contains(bounds);
       if (settled) return;
-      lastFlown.current = selectedId;
+      lastFlown.current = flownKey;
       map.flyToBounds(bounds, {
         padding: L.point(56, 56),
         maxZoom: MAX_FEATURE_ZOOM,
@@ -218,7 +229,7 @@ function ZoomToSelection({
     } catch {
       /* invalid bounds on exotic geometries: leave the view alone */
     }
-  }, [features, selectedId, map]);
+  }, [features, selectedId, focusGeometry, focusKey, map]);
   return null;
 }
 
@@ -250,7 +261,7 @@ function MarkerTip({ record }: { record: FeatureMeasurement }) {
   );
 }
 
-export function FeatureMap({ features, selectedId, onSelect, fitSignal = 0 }: Props) {
+export function FeatureMap({ features, selectedId, onSelect, fitSignal = 0, focusGeometry, focusKey }: Props) {
   const collection = useMemo<FeatureCollection>(
     () => ({ type: "FeatureCollection", features: toRenderable(features) }),
     [features],
@@ -323,7 +334,7 @@ export function FeatureMap({ features, selectedId, onSelect, fitSignal = 0 }: Pr
       />
       <FitBounds collection={collection} signal={fitSignal} />
       <ZoomTracker onZoom={handleZoom} />
-      <ZoomToSelection features={features} selectedId={selectedId} />
+      <ZoomToSelection features={features} selectedId={selectedId} focusGeometry={focusGeometry} focusKey={focusKey} />
       <GeoJSON
         key={`${selectedId ?? "none"}-${collection.features.length}`}
         data={collection}

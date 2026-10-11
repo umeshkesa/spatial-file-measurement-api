@@ -194,3 +194,53 @@ export function selectionViewForGeometry(g: unknown): SelectionView {
   }
   return { kind: "bounds", southWest: [minX, minY], northEast: [maxX, maxY] };
 }
+
+/**
+ * Valid [x, y] positions of a Point/MultiPoint geometry, in stored
+ * (source-CRS) coordinate order. Returns null for any other geometry type
+ * (count not applicable) and for missing geometry. An empty array means the
+ * geometry is a point type but carries no valid positions — callers must
+ * render an unavailable value, never an invented count.
+ */
+export function pointPositionsOf(g: unknown): LngLat[] | null {
+  if (!g || typeof g !== "object") return null;
+  const geom = g as { type?: unknown; coordinates?: unknown };
+  if (geom.type !== "Point" && geom.type !== "MultiPoint") return null;
+  if (geom.type === "Point") {
+    return isFinitePair(geom.coordinates) ? [[geom.coordinates[0], geom.coordinates[1]]] : [];
+  }
+  if (!Array.isArray(geom.coordinates)) return [];
+  return (geom.coordinates as unknown[]).filter(isFinitePair).map(([x, y]) => [x, y] as LngLat);
+}
+
+/**
+ * Number of actual points in a Point/MultiPoint geometry, or null when a
+ * count does not apply (other types, missing/empty/malformed geometry).
+ */
+export function pointCountOf(g: unknown): number | null {
+  const pts = pointPositionsOf(g);
+  return pts !== null && pts.length > 0 ? pts.length : null;
+}
+
+/**
+ * The single geometry of one multi-geometry member, derived from the stored
+ * parent coordinates (no new data fetched). Supports MultiPolygon (part ->
+ * Polygon) and MultiLineString (part -> LineString); null for anything else
+ * or an out-of-range index. Used to frame a selected part on the map.
+ */
+export function partGeometryOf(
+  g: unknown,
+  index: number,
+): { type: string; coordinates: unknown } | null {
+  if (!g || typeof g !== "object") return null;
+  const geom = g as { type?: unknown; coordinates?: unknown };
+  const single =
+    geom.type === "MultiPolygon"
+      ? "Polygon"
+      : geom.type === "MultiLineString"
+        ? "LineString"
+        : null;
+  if (single === null || !Array.isArray(geom.coordinates)) return null;
+  if (!Number.isInteger(index) || index < 0 || index >= geom.coordinates.length) return null;
+  return { type: single, coordinates: geom.coordinates[index] };
+}

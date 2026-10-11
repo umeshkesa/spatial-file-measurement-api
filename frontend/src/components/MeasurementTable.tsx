@@ -1,7 +1,18 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowDownWideNarrow, ChevronLeft, ChevronRight } from "lucide-react";
-import type { MeasurementsPage } from "../lib/api";
-import { featureDisplayName, formatMeasurement } from "../lib/format";
+import { AlertTriangle, ArrowDownWideNarrow, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import type { FeatureMeasurement, MeasurementsPage } from "../lib/api";
+import {
+  M2_PER_ACRE,
+  M2_PER_HECTARE,
+  M_PER_KM,
+  areaOf,
+  assignLandLabels,
+  featureDisplayName,
+  formatMetric,
+  lengthOf,
+} from "../lib/format";
+import { pointCountOf } from "../lib/geo";
+import { filterAndSortRows, type TableSortKey } from "../lib/table";
 import { Badge, Button, Spinner } from "./ui";
 import { cn } from "../lib/cn";
 
@@ -11,35 +22,28 @@ interface Props {
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   onPage: (limit: number, offset: number) => void;
+  /** Dataset-wide list used for stable Land N numbering across pages. */
+  labelSource: FeatureMeasurement[];
 }
 
-type SortKey = "feature_id" | "value";
+const COLS = 13;
 
-export function MeasurementTable({ page, loading, selectedId, onSelect, onPage }: Props) {
+export function MeasurementTable({ page, loading, selectedId, onSelect, onPage, labelSource }: Props) {
+  const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortKey, setSortKey] = useState<SortKey>("feature_id");
+  const [sortKey, setSortKey] = useState<TableSortKey>("feature_id");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
 
-  const rows = useMemo(() => {
-    if (!page) return [];
-    let list = [...page.features];
-    if (typeFilter !== "all") list = list.filter((f) => f.geometry_type === typeFilter);
-    if (statusFilter !== "all")
-      list = list.filter((f) => f.measurement_status === statusFilter);
-    list.sort((a, b) => {
-      if (sortKey === "value") {
-        const av = a.measurement?.value ?? Number.NaN;
-        const bv = b.measurement?.value ?? Number.NaN;
-        if (Number.isNaN(av) && Number.isNaN(bv)) return (a.feature_id - b.feature_id) * sortDir;
-        if (Number.isNaN(av)) return 1;
-        if (Number.isNaN(bv)) return -1;
-        return (av - bv) * sortDir;
-      }
-      return (a.feature_id - b.feature_id) * sortDir;
-    });
-    return list;
-  }, [page, typeFilter, statusFilter, sortKey, sortDir]);
+  const labels = useMemo(() => assignLandLabels(labelSource), [labelSource]);
+
+  const rows = useMemo(
+    () =>
+      page
+        ? filterAndSortRows(page.features, { text: query, typeFilter, statusFilter, sortKey, sortDir })
+        : [],
+    [page, query, typeFilter, statusFilter, sortKey, sortDir],
+  );
 
   const typeOptions = useMemo(
     () => Array.from(new Set((page?.features ?? []).map((f) => f.geometry_type))).sort(),
@@ -55,7 +59,7 @@ export function MeasurementTable({ page, loading, selectedId, onSelect, onPage }
   const totalPages = page ? Math.max(1, Math.ceil(page.total / page.limit)) : 1;
   const currentPage = page ? Math.floor(page.offset / page.limit) + 1 : 1;
 
-  const toggleSort = (key: SortKey) => {
+  const toggleSort = (key: TableSortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 1 ? -1 : 1));
     else {
       setSortKey(key);
@@ -66,6 +70,17 @@ export function MeasurementTable({ page, loading, selectedId, onSelect, onPage }
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        <label className="flex items-center gap-1 text-slate-600">
+          <Search className="h-4 w-4 text-slate-400" aria-hidden />
+          <input
+            type="search"
+            aria-label="Search by feature name or ID"
+            placeholder="Search name or ID…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-44 rounded-md border border-slate-300 bg-white px-2 py-1 placeholder:text-slate-400"
+          />
+        </label>
         <label className="flex items-center gap-1 text-slate-600">
           Geometry
           <select
@@ -98,79 +113,120 @@ export function MeasurementTable({ page, loading, selectedId, onSelect, onPage }
             ))}
           </select>
         </label>
-        <span className="text-xs text-slate-400">Filters apply to the loaded page.</span>
+        <span className="text-xs text-slate-400">Search, filters and sorting apply to the loaded page.</span>
       </div>
 
       <div className="overflow-x-auto rounded-lg ring-1 ring-slate-200">
         <table className="min-w-full divide-y divide-slate-200 bg-white text-sm">
           <thead className="bg-slate-50">
             <tr>
+              <Th>Label</Th>
+              <Th sortable onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir}>
+                Name
+              </Th>
               <Th sortable onClick={() => toggleSort("feature_id")} active={sortKey === "feature_id"} dir={sortDir}>
-                Feature ID
+                ID
               </Th>
               <Th>Geometry</Th>
-              <Th>Name</Th>
-              <Th>Type</Th>
-              <Th sortable onClick={() => toggleSort("value")} active={sortKey === "value"} dir={sortDir}>
-                Value
+              <Th sortable onClick={() => toggleSort("area")} active={sortKey === "area"} dir={sortDir}>
+                Area m²
               </Th>
-              <Th>Status</Th>
+              <Th>Area ha</Th>
+              <Th>Area ac</Th>
+              <Th sortable onClick={() => toggleSort("length")} active={sortKey === "length"} dir={sortDir}>
+                Length m
+              </Th>
+              <Th>Length km</Th>
+              <Th sortable onClick={() => toggleSort("points")} active={sortKey === "points"} dir={sortDir}>
+                Point count
+              </Th>
+              <Th sortable onClick={() => toggleSort("parts")} active={sortKey === "parts"} dir={sortDir}>
+                Parts
+              </Th>
+              <Th sortable onClick={() => toggleSort("status")} active={sortKey === "status"} dir={sortDir}>
+                Status
+              </Th>
               <Th>Error details</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center">
+                <td colSpan={COLS} className="px-4 py-6 text-center">
                   <Spinner label="Loading measurements" />
                 </td>
               </tr>
             )}
             {!loading &&
-              rows.map((f) => (
-                <tr
-                  key={f.feature_id}
-                  onClick={() => onSelect(selectedId === f.feature_id ? null : f.feature_id)}
-                  aria-selected={selectedId === f.feature_id}
-                  className={cn(
-                    "cursor-pointer hover:bg-emerald-50 focus-visible:outline-none",
-                    selectedId === f.feature_id && "bg-emerald-100/60",
-                  )}
-                >
-                  <td className="px-4 py-2 font-mono">{f.feature_id}</td>
-                  <td className="px-4 py-2">
-                    <Badge status={f.geometry_type}>{f.geometry_type}</Badge>
-                  </td>
-                  <td className="max-w-48 truncate px-4 py-2" title={featureDisplayName(f)}>
-                    {featureDisplayName(f)}
-                  </td>
-                  <td className="px-4 py-2">{f.measurement?.type ?? "—"}</td>
-                  <td className="px-4 py-2 font-medium">{formatMeasurement(f)}</td>
-                  <td className="px-4 py-2">
-                    <Badge status={f.measurement_status}>
-                      {f.measurement_status.replaceAll("_", " ")}
-                    </Badge>
-                  </td>
-                  <td className="max-w-64 px-4 py-2 text-xs text-slate-500">
-                    {f.error_details ? (
-                      <span className="flex items-start gap-1" title={f.error_details}>
-                        <AlertTriangle
-                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600"
-                          aria-label="Measurement error"
-                          role="img"
-                        />
-                        <span className="truncate">{f.error_details}</span>
-                      </span>
-                    ) : (
-                      "—"
+              rows.map((f) => {
+                const area = areaOf(f);
+                const length = lengthOf(f);
+                const points = pointCountOf(f.geometry);
+                return (
+                  <tr
+                    key={f.feature_id}
+                    onClick={() => onSelect(selectedId === f.feature_id ? null : f.feature_id)}
+                    aria-selected={selectedId === f.feature_id}
+                    className={cn(
+                      "cursor-pointer hover:bg-emerald-50 focus-visible:outline-none",
+                      selectedId === f.feature_id && "bg-emerald-100/60",
                     )}
-                  </td>
-                </tr>
-              ))}
+                  >
+                    <td className="whitespace-nowrap px-4 py-2 font-semibold text-emerald-800">
+                      {labels.get(f.feature_id) ?? "—"}
+                    </td>
+                    <td className="max-w-48 truncate px-4 py-2" title={featureDisplayName(f)}>
+                      {featureDisplayName(f)}
+                    </td>
+                    <td className="px-4 py-2 font-mono">{f.feature_id}</td>
+                    <td className="px-4 py-2">
+                      <Badge status={f.geometry_type}>{f.geometry_type}</Badge>
+                    </td>
+                    <td className="px-4 py-2 text-right font-medium tabular-nums">{formatMetric(area)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-slate-600">
+                      {formatMetric(area != null ? area / M2_PER_HECTARE : null, 4)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-slate-600">
+                      {formatMetric(area != null ? area / M2_PER_ACRE : null, 4)}
+                    </td>
+                    <td className="px-4 py-2 text-right font-medium tabular-nums">{formatMetric(length)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-slate-600">
+                      {formatMetric(length != null ? length / M_PER_KM : null, 3)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {points === null ? "—" : String(points)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {f.parts ? String(f.parts.length) : "—"}
+                    </td>
+                    <td className="px-4 py-2">
+                      <Badge status={f.measurement_status}>
+                        {f.measurement_status.replaceAll("_", " ")}
+                      </Badge>
+                    </td>
+                    <td className="max-w-64 px-4 py-2 text-xs text-slate-500">
+                      {f.error_details ? (
+                        <span className="flex items-start gap-1" title={f.error_details}>
+                          <AlertTriangle
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600"
+                            aria-label="Measurement error"
+                            role="img"
+                          />
+                          <span className="truncate">{f.error_details}</span>
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
-                  No features match the current filters.
+                <td colSpan={COLS} className="px-4 py-6 text-center text-slate-500">
+                  {query || typeFilter !== "all" || statusFilter !== "all"
+                    ? "No features match the current search or filters."
+                    : "This file contains no features."}
                 </td>
               </tr>
             )}

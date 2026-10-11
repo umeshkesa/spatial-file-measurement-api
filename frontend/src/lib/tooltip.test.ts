@@ -11,6 +11,7 @@ function feat(partial: Partial<FeatureMeasurement> & { feature_id: number }): Fe
     measurement_status: "COMPLETED",
     error_details: null,
     components: null,
+    parts: null,
     ...partial,
   };
 }

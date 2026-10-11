@@ -5,6 +5,8 @@ import { describeError } from "../lib/api";
 import {
   buildCsv,
   buildJsonExport,
+  buildPartsCsv,
+  buildPointsCsv,
   downloadTextFile,
   exportFilename,
   fetchAllMeasurements,
@@ -20,11 +22,11 @@ interface Props {
 }
 
 export function ExportPanel({ file, units, cachedFeatures, disabled }: Props) {
-  const [busy, setBusy] = useState<"csv" | "json" | null>(null);
+  const [busy, setBusy] = useState<"csv" | "json" | "points" | "parts" | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const runExport = async (kind: "csv" | "json") => {
+  const runExport = async (kind: "csv" | "json" | "points" | "parts") => {
     setBusy(kind);
     setError(null);
     setProgress("Starting…");
@@ -40,6 +42,18 @@ export function ExportPanel({ file, units, cachedFeatures, disabled }: Props) {
       const date = new Date();
       if (kind === "csv") {
         downloadTextFile(buildCsv(bundle), "text/csv", exportFilename(file.filename, "csv", date));
+      } else if (kind === "points") {
+        downloadTextFile(
+          buildPointsCsv(bundle),
+          "text/csv",
+          exportFilename(file.filename, "csv", date, "point_coordinates"),
+        );
+      } else if (kind === "parts") {
+        downloadTextFile(
+          buildPartsCsv(bundle),
+          "text/csv",
+          exportFilename(file.filename, "csv", date, "multipart_parts"),
+        );
       } else {
         downloadTextFile(
           buildJsonExport(bundle),
@@ -89,6 +103,34 @@ export function ExportPanel({ file, units, cachedFeatures, disabled }: Props) {
             <FileJson className="h-4 w-4" aria-hidden />
           )}
           Export JSON
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={off}
+          onClick={() => void runExport("points")}
+          aria-label="Export point coordinates as CSV"
+        >
+          {busy === "points" ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <FileSpreadsheet className="h-4 w-4" aria-hidden />
+          )}
+          Export point coordinates
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={off}
+          onClick={() => void runExport("parts")}
+          aria-label="Export multipart part measurements as CSV"
+        >
+          {busy === "parts" ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <FileSpreadsheet className="h-4 w-4" aria-hidden />
+          )}
+          Export multipart parts
         </Button>
         {busy && (
           <span className="inline-flex items-center gap-1 text-xs text-slate-500" aria-live="polite">

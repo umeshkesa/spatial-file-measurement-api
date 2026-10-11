@@ -363,12 +363,14 @@ fixture (7 placemarks: courtyard-hole ratio, both-fields area, mixed-bag compone
 empty-polygon failure). Tests use isolated temp SQLite DBs and storage — never real
 user data.
 
-Schema note: `GET measurements` features carry an additive, optional `components`
-array (per-component type/value/unit/status) that is populated only for
-GeometryCollection features; existing clients ignore it. The matching
-`features.components_json` column arrives via Alembic migration `0002_components`
-— run `alembic upgrade head` against any pre-existing database (fresh databases
-are created with the column by `init_db()`).
+Schema note: `GET measurements` features carry additive, optional `components`
+(per-component type/value/unit/status, GeometryCollection only) and `parts`
+(part_index/type/value/unit/status, MultiPolygon and MultiLineString only)
+arrays; existing clients ignore them. The matching `features.components_json`
+and `features.parts_json` columns arrive via Alembic migrations
+`0002_components` and `0003_parts` — run `alembic upgrade head` against any
+pre-existing database (fresh databases are created with the columns by
+`init_db()`).
 
 ## 18. Design decisions and alternatives
 

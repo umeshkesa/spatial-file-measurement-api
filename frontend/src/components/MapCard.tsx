@@ -15,6 +15,10 @@ interface Props {
   selectedId: number | null;
   onSelect: (f: FeatureMeasurement) => void;
   emptyHint: string;
+  /** Optional single-part geometry to frame instead of the whole feature. */
+  focusGeometry?: unknown;
+  /** Stable key for focusGeometry (e.g. "fid:partIndex"). */
+  focusKey?: string | null;
 }
 
 /** Reusable map card: one Leaflet instance, reset-view action, full state handling. */
@@ -29,6 +33,8 @@ export function MapCard({
   selectedId,
   onSelect,
   emptyHint,
+  focusGeometry,
+  focusKey,
 }: Props) {
   const [fitSignal, setFitSignal] = useState(0);
 
@@ -86,6 +92,8 @@ export function MapCard({
             selectedId={selectedId}
             onSelect={onSelect}
             fitSignal={fitSignal}
+            focusGeometry={focusGeometry}
+            focusKey={focusKey}
           />
         )}
       </CardBody>

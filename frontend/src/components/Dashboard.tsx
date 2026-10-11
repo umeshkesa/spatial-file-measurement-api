@@ -1,8 +1,9 @@
-import { Boxes, FileStack, MapPin, Ruler, SquareDashed } from "lucide-react";
+import { AlertTriangle, Boxes, FileStack, MapPin, Ruler, ShieldAlert, SquareDashed } from "lucide-react";
 import type { FeatureMeasurement, FileInfo, MeasurementsPage } from "../lib/api";
 import { formatDateTime, summarize } from "../lib/format";
-import { Badge, Card, CardBody, Skeleton } from "./ui";
+import { Badge, Card, CardBody, CardHeader, Skeleton } from "./ui";
 import { MapCard } from "./MapCard";
+import { MeasurementTable } from "./MeasurementTable";
 
 interface Props {
   file: FileInfo | null;
@@ -15,6 +16,16 @@ interface Props {
   onRetryMap: () => void;
   selectedId: number | null;
   onSelectFeature: (f: FeatureMeasurement) => void;
+  /** Full feature list when already fetched; totals prefer it over the page. */
+  allFeatures: FeatureMeasurement[] | null;
+  pageLoading: boolean;
+  onPage: (limit: number, offset: number) => void;
+  labelSource: FeatureMeasurement[];
+  onSelectId: (id: number | null) => void;
+  /** Optional single-part geometry to frame instead of the whole feature. */
+  focusGeometry?: unknown;
+  /** Stable key for focusGeometry (e.g. "fid:partIndex"). */
+  focusKey?: string | null;
 }
 
 function Stat({
@@ -67,12 +78,19 @@ export function Dashboard({
   onRetryMap,
   selectedId,
   onSelectFeature,
+  allFeatures,
+  pageLoading,
+  onPage,
+  labelSource,
+  onSelectId,
+  focusGeometry,
+  focusKey,
 }: Props) {
   if (loading && !file) {
     return (
       <div className="space-y-4" aria-label="Loading dashboard">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 8 }).map((_, i) => (
             <StatSkeleton key={i} />
           ))}
         </div>
@@ -85,7 +103,11 @@ export function Dashboard({
     );
   }
 
-  const summary = page ? summarize(page.features) : null;
+  // Totals use the full dataset when already fetched (map/export cache);
+  // otherwise they honestly describe only the loaded page.
+  const totalsSource = allFeatures ?? page?.features ?? null;
+  const scope = allFeatures ? "dataset total" : "loaded page total";
+  const summary = totalsSource ? summarize(totalsSource) : null;
   const areaUnit = page?.units?.area ?? "m²";
   const lengthUnit = page?.units?.length ?? "m";
 
@@ -106,29 +128,41 @@ export function Dashboard({
         />
         <Stat
           icon={<SquareDashed className="h-5 w-5" aria-hidden />}
-          label={`Polygon area — loaded page total (${areaUnit})`}
+          label={`Total polygon area (${areaUnit})`}
           value={
             summary?.totalArea != null
               ? summary.totalArea.toLocaleString("en-US", { maximumFractionDigits: 2 })
               : "—"
           }
-          sub={summary ? `${summary.polygonCount} polygon features on this page` : undefined}
+          sub={summary ? `${scope} · ${summary.polygonCount} valid polygon features` : undefined}
         />
         <Stat
           icon={<Ruler className="h-5 w-5" aria-hidden />}
-          label={`Line length — loaded page total (${lengthUnit})`}
+          label={`Total line length (${lengthUnit})`}
           value={
             summary?.totalLength != null
               ? summary.totalLength.toLocaleString("en-US", { maximumFractionDigits: 2 })
               : "—"
           }
-          sub={summary ? `${summary.lineCount} line features on this page` : undefined}
+          sub={summary ? `${scope} · ${summary.lineCount} valid line features` : undefined}
         />
         <Stat
           icon={<MapPin className="h-5 w-5" aria-hidden />}
-          label="Point features (this page)"
+          label="Point features"
           value={summary ? String(summary.pointCount) : "—"}
           sub="Points report Not applicable"
+        />
+        <Stat
+          icon={<AlertTriangle className="h-5 w-5" aria-hidden />}
+          label="Failed features"
+          value={summary ? String(summary.failedCount) : "—"}
+          sub={summary && summary.failedCount > 0 ? "Excluded from totals" : "None — all processed"}
+        />
+        <Stat
+          icon={<ShieldAlert className="h-5 w-5" aria-hidden />}
+          label="Unsupported features"
+          value={summary ? String(summary.unsupportedCount) : "—"}
+          sub={summary && summary.partialCount > 0 ? `${summary.partialCount} partially measured` : "Preserved with reasons"}
         />
         <Card>
           <CardBody className="flex items-start gap-3">
@@ -176,7 +210,29 @@ export function Dashboard({
         selectedId={selectedId}
         onSelect={onSelectFeature}
         emptyHint="Upload a .kml file or .zip Shapefile archive and its real geometries will appear here — nothing is shown until then."
+        focusGeometry={focusGeometry}
+        focusKey={focusKey}
       />
+
+      <Card>
+        <CardHeader>
+          <h2 className="font-semibold">Feature-wise measurement results</h2>
+          <p className="text-xs text-slate-500">
+            Every feature from {file?.filename ?? "the file"} with its own measurement.
+            Click a row to highlight it on the map.
+          </p>
+        </CardHeader>
+        <CardBody>
+          <MeasurementTable
+            page={page}
+            loading={pageLoading}
+            selectedId={selectedId}
+            onSelect={onSelectId}
+            onPage={onPage}
+            labelSource={labelSource}
+          />
+        </CardBody>
+      </Card>
     </div>
   );
 }
